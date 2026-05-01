@@ -172,8 +172,8 @@
   #tree-view {
     flex: 1;
     overflow-y: auto;
-    overflow-x: auto;
-    padding: 12px 8px;
+    overflow-x: hidden;
+    padding: 4px 0;
     scrollbar-width: thin;
     scrollbar-color: var(--green3) var(--dim);
     font-size: 13px;
@@ -183,12 +183,18 @@
   .tree-row {
     display: flex;
     align-items: center;
-    padding: 3px 0;
+    padding: 5px 0;
     position: relative;
     white-space: nowrap;
     cursor: default;
     user-select: none;
+    border-left: 2px solid transparent;
   }
+  .tree-row.unlocked:hover { background: #00ff4109; border-left-color: var(--green3); }
+  .tree-row.locked:hover   { background: #ffffff04; }
+  .tree-row.is-you         { border-left-color: var(--cyan); }
+  .tree-row.focused        { border-left-color: var(--green); background: #00ff4112; }
+  .tree-row.selected       { border-left-color: var(--amber); }
 
   /* connector lines drawn via pseudo + siblings */
   .tree-connector {
@@ -876,12 +882,22 @@
   <!-- MAIN TREE VIEW -->
   <div id="main-view">
     <div id="path-bar">PATH: <span id="cur-path">C:\Users\david_chen\Downloads</span></div>
+    <div id="tree-toolbar" style="display:flex;align-items:center;gap:5px;padding:3px 8px;border-bottom:1px solid var(--border);background:var(--bg3);flex-shrink:0;min-height:26px;">
+      <button id="btn-up-dir" onclick="goUpDir()" style="display:none;padding:2px 9px;background:var(--dim);border:1px solid var(--border);color:var(--textdim);font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.5px;">▲ ..</button>
+      <button id="btn-sel-all" onclick="selectAllInDir()" style="display:none;padding:2px 9px;background:var(--dim);border:1px solid var(--border);color:var(--green2);font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.5px;">SELECT ALL</button>
+      <button id="btn-desel" onclick="G.selectedFiles.clear();renderFSTree();updateActionButtons();" style="display:none;padding:2px 9px;background:var(--dim);border:1px solid var(--border);color:var(--textdim);font-family:inherit;font-size:10px;cursor:pointer;letter-spacing:.5px;">DESELECT</button>
+      <span id="sel-count" style="color:var(--amber);font-size:10px;margin-left:4px;display:none;"></span>
+    </div>
 
     <!-- WAITING SCREEN (overlays tree) -->
     <div id="waiting-screen">
       <div class="wt blink">WAITING FOR USER INTERACTION...</div>
       <div class="wsub" id="waiting-desc">You are dormant inside <strong>Downloads/setup_crack.exe</strong>.<br>You must wait for the user to open the file, or take a risk.</div>
-      <div id="waiting-choices"></div>
+      <div id="waiting-choices">
+        <button class="choice-btn" onclick="if(typeof startDormantPhase==='function'){ document.getElementById('waiting-choices').innerHTML=''; const waitTime=15000+Math.random()*20000; document.getElementById('waiting-desc').innerHTML='Waiting for user to open file...<br><span class=\'blink\'>...</span>'; log('Dormant — waiting for user to open file','info'); setTimeout(()=>activatePayload(false),waitTime); }">WAIT FOR USER (Safe)</button>
+        <button class="choice-btn" onclick="if(typeof startDormantPhase==='function'){ document.getElementById('waiting-choices').innerHTML=''; const waitTime=8000+Math.random()*10000; document.getElementById('waiting-desc').innerHTML='Waiting to be moved to new directory...<br><span class=\'blink\'>...</span>'; log('Monitoring for file move operation','info'); setTimeout(()=>{ if(Math.random()<0.7){ activatePayload(false); log('File moved by user — now active!','success'); } else { log('Move operation failed — still waiting','warn'); startDormantPhase(); } },waitTime); }">WAIT TO BE MOVED (Moderate risk)</button>
+        <button class="choice-btn risk" onclick="if(typeof startDormantPhase==='function'){ log('Attempting self-execution...','danger'); G.detection+=35; document.getElementById('waiting-choices').innerHTML=''; document.getElementById('waiting-desc').innerHTML='Self-executing... high detection risk!<br><span class=\'blink\' style=\'color:var(--red)\'>DANGER</span>'; setTimeout(()=>{ if(G.detection>=100){ triggerLose('DETECTED DURING SELF-EXECUTION'); } else { activatePayload(true); } },2000); }">SELF-EXECUTE (Extremely Risky!)</button>
+      </div>
     </div>
 
     <!-- FULL FILESYSTEM TREE -->
@@ -902,6 +918,7 @@
     <div id="action-panel">
       <div class="action-group-label">ACTIONS</div>
       <button class="action-btn infect" id="btn-infect" onclick="openInfectModal()">⬡ INFECT<span class="cost">CPU++</span></button>
+      <button class="action-btn" id="btn-execute" onclick="doExecute()" disabled>▶ EXECUTE<span class="cost">varies</span></button>
       <button class="action-btn" id="btn-scan" onclick="doScan()">◈ SCAN<span class="cost">5 CPU</span></button>
       <button class="action-btn" id="btn-hide" onclick="doHide()">◌ HIDE<span class="cost">PAUSES</span></button>
       <button class="action-btn danger-btn" id="btn-delete" onclick="doDelete()">✕ DELETE<span class="cost">+PROC</span></button>
@@ -1419,120 +1436,150 @@ function renderFSTree() {
   const el = document.getElementById('tree-view');
   if (!el || !fs) return;
   el.innerHTML = '';
-  renderTreeNodeNew(fs, el, [], true);
+  if (!window.G_collapsed) window.G_collapsed = new Set();
+  renderTreeNodeNew(fs, el, 0, true);
+  // toolbar buttons
+  const parent = G.currentNode ? findParent(G.currentNode.id) : null;
+  const upBtn = document.getElementById('btn-up-dir');
+  if (upBtn) upBtn.style.display = (parent && G.currentNode?.id !== 'root') ? '' : 'none';
+  const inActiveDir = G.currentNode && (G.infectedFiles.has(G.currentNode.id) || G.currentNode.isYou);
+  const selectable = inActiveDir && G.currentNode.children
+    ? G.currentNode.children.filter(c => canSelectForInfect(c)).length : 0;
+  const saBtn = document.getElementById('btn-sel-all');
+  const dsBtn = document.getElementById('btn-desel');
+  const sc = document.getElementById('sel-count');
+  if (saBtn) saBtn.style.display = selectable > 0 ? '' : 'none';
+  if (dsBtn) dsBtn.style.display = G.selectedFiles.size > 0 ? '' : 'none';
+  if (sc) {
+    if (G.selectedFiles.size > 0) { sc.style.display = ''; sc.textContent = G.selectedFiles.size + ' selected'; }
+    else sc.style.display = 'none';
+  }
 }
 
-// prefixParts: array of booleans — true = draw '│', false = draw ' '
-// isLast: whether this node is last in its parent's children list
-function renderTreeNodeNew(node, container, prefixParts, isLast) {
+function renderTreeNodeNew(node, container, depth, isLast) {
+  if (!window.G_collapsed) window.G_collapsed = new Set();
   const isInfected = G.infectedFiles.has(node.id) || node.isYou;
   const task = G.tasks.find(t => t.targetId === node.id);
   const isSelected = G.selectedFiles.has(node.id);
   const isFocused = G.currentNode?.id === node.id;
   const isScanned = G.scannedFiles.has(node.id);
+  const isDir = node.type === 'dir';
+  const hasKids = node.children && node.children.length > 0;
+  const isCollapsed = G_collapsed.has(node.id);
+  const _parentNode2 = findParent(node.id);
+  const _parentHasYou2 = _parentNode2 && _parentNode2.children && _parentNode2.children.some(c => c.isYou);
+  const accessible = isInfected || node.isYou || node.id === 'root' || node.id === 'downloads'
+    || (node.children && node.children.some(c => c.isYou))
+    || _parentHasYou2;
 
-  // Build connector string
-  // Each prefix part: '│   ' or '    '
-  // Then for this node: '├── ' or '└── '
-  let connectorStr = '';
-  for (let i = 0; i < prefixParts.length; i++) {
-    connectorStr += prefixParts[i] ? '│   ' : '    ';
-  }
-  if (prefixParts.length > 0) {
-    connectorStr += isLast ? '└── ' : '├── ';
-  }
-
-  // State classes
+  // State class
+  const parentNode = findParent(node.id);
+  const parentHasYou = parentNode && parentNode.children && parentNode.children.some(c => c.isYou);
+  const isAccessible = isInfected || node.isYou || (parentNode && (G.infectedFiles.has(parentNode.id) || parentNode.isYou || parentHasYou));
   let stateClass = 'locked';
   if (node.isYou) stateClass = 'is-you';
   else if (isInfected) stateClass = 'unlocked';
+  else if (isAccessible && node.type !== 'dir') stateClass = 'unlocked';
   if (isSelected && !node.isYou) stateClass += ' selected';
   if (task) stateClass = 'unlocked infecting';
-  if (isFocused && isInfected) stateClass += ' focused';
+  if (isFocused && (isInfected || node.isYou)) stateClass += ' focused';
 
   // Badges
   let badges = '';
   if (node.isYou) badges += '<span class="tbadge you">YOU</span>';
   else if (task) badges += `<span class="tbadge infecting">${task.progress.toFixed(0)}%</span>`;
-  else if (isInfected && node.type !== 'dir') badges += '<span class="tbadge infected">INFECTED</span>';
+  else if (isInfected && !isDir) badges += '<span class="tbadge infected">INFECTED</span>';
   if (isScanned && node.security >= 3) badges += '<span class="tbadge secure">SECURED</span>';
   if (isScanned && node.data) badges += `<span class="tbadge data">${node.data}MB</span>`;
   if ((isInfected || node.isYou) && node.hasTerminal) badges += '<span class="tbadge terminal">TERM</span>';
 
-  // Infect progress bar
   let progressBar = '';
-  if (task) {
-    progressBar = `<div class="tree-infect-bar"><div class="tree-infect-bar-fill" style="width:${task.progress.toFixed(0)}%"></div></div>`;
-  }
+  if (task) progressBar = `<div class="tree-infect-bar"><div class="tree-infect-bar-fill" style="width:${task.progress.toFixed(0)}%"></div></div>`;
 
-  // Meta (size, sec)
   let meta = '';
-  if (node.size) meta += fmtSize(node.size);
+  if (node.size) meta = fmtSize(node.size);
   let secDot = '';
   if (isScanned) {
-    const secColors = ['#00aa22','#ffaa00','#ff3333','#ff00ff'];
-    secDot = `<div class="tree-sec" style="background:${secColors[node.security||0]}"></div>`;
+    const sc = ['#00aa22','#ffaa00','#ff3333','#ff00ff'];
+    secDot = `<div class="tree-sec" style="background:${sc[node.security||0]}"></div>`;
+  }
+
+  // Expand arrow for dirs
+  let arrow = '';
+  if (isDir && hasKids && accessible) {
+    arrow = `<span style="display:inline-block;width:14px;text-align:center;font-size:10px;color:var(--green3);flex-shrink:0;cursor:pointer;" data-expand="${node.id}">${isCollapsed ? '▶' : '▼'}</span>`;
+  } else if (isDir) {
+    arrow = `<span style="display:inline-block;width:14px;text-align:center;font-size:10px;color:#1a3a1a;flex-shrink:0;">—</span>`;
+  } else {
+    arrow = `<span style="display:inline-block;width:14px;flex-shrink:0;"></span>`;
   }
 
   const row = document.createElement('div');
   row.className = `tree-row ${stateClass}`;
   row.dataset.id = node.id;
+  row.style.paddingLeft = (depth * 14 + 6) + 'px';
 
   row.innerHTML = `
-    <span class="tree-connector">${connectorStr}</span>
-    <div class="tree-node-inner">
+    ${arrow}
+    <div class="tree-node-inner" style="flex:1;min-width:0;">
       <span class="tree-icon">${typeIcon(node.type)}</span>
-      <span class="tree-name">${node.name}</span>
+      <span class="tree-name" style="overflow:hidden;text-overflow:ellipsis;">${node.name}</span>
       ${secDot}
       <div class="tree-badges">${badges}</div>
       ${progressBar}
     </div>
-    ${meta ? `<span class="tree-meta">${meta}</span>` : ''}
+    ${meta ? `<span class="tree-meta" style="padding-right:8px;">${meta}</span>` : ''}
   `;
 
-  // Click handler
-  if (node.isYou) {
-    // no-op, you can't click yourself
-  } else if (isInfected || task) {
-    row.querySelector('.tree-node-inner').addEventListener('click', () => handleTreeClick(node));
-  } else {
-    // Locked — clicking selects for infection
-    row.querySelector('.tree-node-inner').addEventListener('click', () => {
-      if (canSelectForInfect(node)) {
-        toggleSelect(node.id);
-      }
+  // Expand arrow click
+  const arrowEl = row.querySelector('[data-expand]');
+  if (arrowEl) {
+    arrowEl.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (G_collapsed.has(node.id)) G_collapsed.delete(node.id);
+      else G_collapsed.add(node.id);
+      renderFSTree();
     });
+  }
+
+  // Row click
+  const inner = row.querySelector('.tree-node-inner');
+  if (!node.isYou && inner) {
+    if (isDir && accessible) {
+      // single = expand/collapse, double = navigate in
+      let t = null;
+      inner.addEventListener('click', () => {
+        if (t) { clearTimeout(t); t = null; handleTreeClick(node); }
+        else { t = setTimeout(() => { t = null; if (G_collapsed.has(node.id)) G_collapsed.delete(node.id); else G_collapsed.add(node.id); renderFSTree(); }, 250); }
+      });
+    } else if (isInfected || task) {
+      inner.addEventListener('click', () => handleTreeClick(node));
+    } else {
+      // selectable if parent is infected/accessible
+      inner.addEventListener('click', () => {
+        if (canSelectForInfect(node)) toggleSelect(node.id);
+      });
+    }
   }
 
   container.appendChild(row);
+  if (isFocused) setTimeout(() => row.scrollIntoView({block:'nearest',behavior:'smooth'}), 30);
 
-  // Recurse into children
-  if (node.children) {
-    // Only show children if: parent is infected/you OR it's root OR parent is a known accessible dir
-    const showChildren = isInfected || node.isYou || node.id === 'root' || node.id === 'downloads';
-    const children = node.children;
-    children.forEach((child, i) => {
-      const childIsLast = i === children.length - 1;
-      // Build next prefix
-      const nextPrefix = prefixParts.length === 0
-        ? []
-        : [...prefixParts, !isLast];
-      if (showChildren) {
-        renderTreeNodeNew(child, container, nextPrefix.length === 0 && prefixParts.length === 0 ? [] : [...prefixParts, !isLast], childIsLast);
-      } else {
-        // Show locked children with dim prefix
-        renderTreeNodeNew(child, container, prefixParts.length === 0 ? [] : [...prefixParts, !isLast], childIsLast);
-      }
+  // Recurse
+  if (node.children && !isCollapsed) {
+    node.children.forEach((child, i) => {
+      renderTreeNodeNew(child, container, depth + 1, i === node.children.length - 1);
     });
   }
 }
-
 function canSelectForInfect(node) {
-  // Can only select files in current infected directory
-  if (!G.currentNode) return false;
+  if (node.type === 'dir') return false;
+  if (G.infectedFiles.has(node.id) || node.isYou) return false;
   const parent = findParent(node.id);
   if (!parent) return false;
-  return (G.infectedFiles.has(parent.id) || parent.isYou) && !G.infectedFiles.has(node.id);
+  // parent is infected, OR parent contains the YOU node (starting dir)
+  const parentHasYou = parent.children && parent.children.some(c => c.isYou);
+  return G.infectedFiles.has(parent.id) || parent.isYou || parentHasYou;
 }
 
 function toggleSelect(id) {
@@ -1581,6 +1628,10 @@ function updateActionButtons() {
   document.getElementById('btn-scan').disabled = !inActiveDir;
   document.getElementById('btn-hide').disabled = !inActiveDir;
   document.getElementById('btn-delete').disabled = G.selectedFiles.size !== 1;
+  const _execNode = G.selectedFiles.size === 1 ? nodeMap[[...G.selectedFiles][0]] : null;
+  const _canExec = _execNode && _execNode.type !== 'dir' && (G.infectedFiles.has(_execNode.id) || canSelectForInfect(_execNode));
+  const _execBtn = document.getElementById('btn-execute');
+  if (_execBtn) _execBtn.disabled = !_canExec;
 
   if (G.goal === 'encrypt') document.getElementById('btn-encrypt').style.display = '';
   if (G.goal === 'data') document.getElementById('btn-exfil').style.display = '';
@@ -2131,6 +2182,224 @@ function showFileInfo(item) {
 }
 
 // ============================================================
+// EXECUTE
+// ============================================================
+function doExecute() {
+  if (G.selectedFiles.size !== 1) return;
+  const id = [...G.selectedFiles][0];
+  const node = nodeMap[id];
+  if (!node || node.type === 'dir') return;
+
+  G.selectedFiles.clear();
+  updateActionButtons();
+
+  // ── EXE files ──
+  if (node.type === 'exe') {
+    executeExe(node);
+    return;
+  }
+
+  // ── ZIP: extract contents ──
+  if (node.type === 'zip') {
+    const extractCount = Math.floor(Math.random() * 4) + 2;
+    log(`Extracting ${node.name}... found ${extractCount} files inside`, 'success');
+    G.detection += 2;
+    const parent = findParent(node.id);
+    if (parent) {
+      // Inject fake extracted nodes
+      const fakeTypes = ['dat','txt','doc','pdf'];
+      const fakeNames = ['readme.txt','config.dat','data.db','notes.txt','backup.dat','creds.txt','keys.dat'];
+      for (let i = 0; i < extractCount; i++) {
+        const t = fakeTypes[Math.floor(Math.random()*fakeTypes.length)];
+        const nm = fakeNames[Math.floor(Math.random()*fakeNames.length)].replace('.', `_${i+1}.`);
+        const fakeId = 'extracted_' + Date.now() + '_' + i;
+        const fakeNode = { id: fakeId, name: nm, type: t, security: node.security, size: Math.random()*10+0.1, data: Math.random()<0.4 ? Math.floor(Math.random()*100+5) : null, sensitive: Math.random()<0.3 };
+        nodeMap[fakeId] = fakeNode;
+        parent.children = parent.children || [];
+        parent.children.push(fakeNode);
+      }
+      renderFSTree();
+      log(`Extracted to ${parent.name}/`, 'success');
+    }
+    updateStats();
+    return;
+  }
+
+  // ── DAT / DOC / TXT / PDF / LNK: open and inspect ──
+  openFileContents(node);
+}
+
+function executeExe(node) {
+  // MsMpEng.exe — AV process, triggers scan
+  if (node.isAV) {
+    log('Executed MsMpEng.exe — AV waking up!', 'danger');
+    G.detection += 25;
+    G.avActive = true;
+    updateStats();
+    showModal('⚠ DANGER: AV TRIGGERED', `
+      <p style="color:var(--red)">Executing the antivirus process caused it to wake and begin scanning.</p>
+      <div class="info-row"><span class="key">Detection Rise</span><span class="val red">+25%</span></div>
+      <div class="info-row"><span class="key">AV State</span><span class="val red">ACTIVE SCAN</span></div>
+    `, [{ label: 'CLOSE', action: closeModal }]);
+    return;
+  }
+
+  // ntoskrnl.exe — kernel takeover
+  if (node.isKernel) {
+    log('Injecting into kernel ntoskrnl.exe...', 'warn');
+    G.detection += 20;
+    G.cpu = Math.min(100, G.cpu + 30);
+    setTimeout(() => {
+      if (G.detection >= 100) { triggerLose('DETECTED DURING KERNEL INJECTION'); return; }
+      G.kernelInfected = true;
+      G.infectedFiles.add(node.id);
+      log('KERNEL INFECTED — deep system access granted', 'success');
+      updateStats();
+      renderFSTree();
+      showModal('KERNEL COMPROMISED', `
+        <p style="color:var(--green)">You now have ring-0 access. System Control objective progressed.</p>
+        <div class="info-row"><span class="key">Kernel</span><span class="val" style="color:var(--green)">OWNED</span></div>
+        <div class="info-row"><span class="key">Detection</span><span class="val red">+20%</span></div>
+      `, [{ label: 'CLOSE', action: closeModal }]);
+    }, 1500);
+    return;
+  }
+
+  // lsass.exe — credential dump
+  if (node.id === 'sys_lsass') {
+    log('Dumping lsass.exe credentials...', 'warn');
+    G.detection += 18;
+    const gained = node.data || 300;
+    G.dataExfil += gained;
+    G.infectedFiles.add(node.id);
+    log(`Credential dump complete — ${gained}MB exfiltrated`, 'success');
+    updateStats();
+    showModal('CREDENTIAL DUMP', `
+      <p style="color:var(--green)">lsass memory dumped. Passwords and hashes extracted.</p>
+      <div class="info-row"><span class="key">Data Gained</span><span class="val" style="color:var(--cyan)">${gained} MB</span></div>
+      <div class="info-row"><span class="key">Detection</span><span class="val red">+18%</span></div>
+    `, [{ label: 'CLOSE', action: closeModal }]);
+    return;
+  }
+
+  // services.exe — list services, unlock autorun path
+  if (node.id === 'sys_svc') {
+    log('Enumerating services via services.exe...', 'info');
+    G.detection += 8;
+    const regNode = nodeMap['reg_run'];
+    if (regNode && !G.infectedFiles.has(regNode.id)) {
+      log('Autorun registry key discovered — path unlocked', 'success');
+    }
+    showModal('SERVICES ENUMERATED', `
+      <p style="color:var(--textdim)">Running services mapped. Autorun registry path highlighted.</p>
+      <div class="info-row"><span class="key">Services Found</span><span class="val">14</span></div>
+      <div class="info-row"><span class="key">Detection</span><span class="val red">+8%</span></div>
+      <div class="info-row"><span class="key">Autorun Path</span><span class="val" style="color:var(--cyan)">HKLM\\Software\\Run</span></div>
+    `, [{ label: 'CLOSE', action: closeModal }]);
+    updateStats();
+    return;
+  }
+
+  // winlogon.exe — intercept login
+  if (node.id === 'sys_winlog') {
+    log('Hooking winlogon.exe...', 'warn');
+    G.detection += 12;
+    G.cpu = Math.min(100, G.cpu + 10);
+    setTimeout(() => {
+      G.infectedFiles.add(node.id);
+      log('Winlogon hooked — login credentials will be captured on next login', 'success');
+      updateStats();
+      renderFSTree();
+    }, 2000);
+    showModal('WINLOGON HOOKED', `
+      <p style="color:var(--green)">Login process intercepted. Next user login will capture plaintext credentials.</p>
+      <div class="info-row"><span class="key">Detection</span><span class="val red">+12%</span></div>
+    `, [{ label: 'CLOSE', action: closeModal }]);
+    return;
+  }
+
+  // WINWORD / EXCEL — open Office, expose documents
+  if (node.id === 'office_exe' || node.id === 'office_xl') {
+    const appName = node.id === 'office_exe' ? 'Microsoft Word' : 'Microsoft Excel';
+    log(`Executing ${appName}...`, 'info');
+    G.proc += 8;
+    G.detection += 3;
+    // Mark nearby doc files as accessible
+    const docsDir = nodeMap['documents'];
+    if (docsDir) {
+      docsDir.children.forEach(c => { if (!G.infectedFiles.has(c.id)) G.infectedFiles.add(c.id); });
+      log(`${appName} opened — Documents folder files now accessible`, 'success');
+    }
+    updateStats();
+    renderFSTree();
+    showModal(`${appName.toUpperCase()} RUNNING`, `
+      <p style="color:var(--green)">Process injected into ${appName}. Documents folder files are now readable.</p>
+      <div class="info-row"><span class="key">PROC Cost</span><span class="val red">+8</span></div>
+      <div class="info-row"><span class="key">Detection</span><span class="val red">+3%</span></div>
+    `, [{ label: 'CLOSE', action: closeModal }]);
+    return;
+  }
+
+  // VLC_setup.exe or generic exe
+  log(`Executing ${node.name}...`, 'info');
+  G.proc += 5;
+  G.detection += Math.random() < 0.4 ? 8 : 2;
+  G.infectedFiles.add(node.id);
+  updateStats();
+  renderFSTree();
+  showModal(`EXECUTED: ${node.name}`, `
+    <p style="color:var(--textdim)">Process spawned. Running in user context.</p>
+    <div class="info-row"><span class="key">PID</span><span class="val">${Math.floor(Math.random()*8000+1000)}</span></div>
+    <div class="info-row"><span class="key">PROC Cost</span><span class="val red">+5</span></div>
+  `, [{ label: 'CLOSE', action: closeModal }]);
+}
+
+function openFileContents(node) {
+  // lnk — follow shortcut
+  if (node.type === 'lnk') {
+    log(`Following shortcut ${node.name}...`, 'info');
+    // Navigate to desktop or C:\
+    const target = nodeMap['desktop'] || nodeMap['root'];
+    if (target) { G.currentNode = target; document.getElementById('cur-path').textContent = getPath(target.id); renderFSTree(); updateActionButtons(); }
+    closeModal && closeModal();
+    return;
+  }
+
+  let exfilBtn = [];
+  let bodyHtml = `
+    <div class="info-row"><span class="key">File</span><span class="val">${node.name}</span></div>
+    <div class="info-row"><span class="key">Type</span><span class="val">${node.type.toUpperCase()}</span></div>
+    <div class="info-row"><span class="key">Size</span><span class="val">${fmtSize(node.size||0)}</span></div>
+  `;
+
+  if (node.sensitive) bodyHtml += `<div class="info-row"><span class="key">Contents</span><span class="val red">⚠ SENSITIVE DATA DETECTED</span></div>`;
+  if (node.data) {
+    bodyHtml += `<div class="info-row"><span class="key">Exfil Value</span><span class="val" style="color:var(--cyan)">${node.data} MB</span></div>`;
+    bodyHtml += `<p style="margin-top:8px;color:var(--textdim);font-size:10px;">File opened — data is readable. You can exfiltrate immediately.</p>`;
+    exfilBtn = [{ label: 'EXFIL NOW', action: () => {
+      G.dataExfil += node.data;
+      G.detection += 5;
+      log(`Exfiltrated ${node.name} — ${node.data}MB`, 'success');
+      updateStats();
+      closeModal();
+    }, cls: 'primary' }];
+  } else {
+    bodyHtml += `<p style="margin-top:8px;color:var(--textdim);font-size:10px;">File opened. No valuable data found.</p>`;
+  }
+
+  log(`Opened ${node.name}`, 'info');
+  G.detection += 1;
+  G.infectedFiles.add(node.id);
+  renderFSTree();
+  updateStats();
+
+  showModal('OPEN: ' + node.name, bodyHtml, [
+    { label: 'CLOSE', action: closeModal },
+    ...exfilBtn
+  ]);
+}
+
+// ============================================================
 // TASK ENGINE
 // ============================================================
 function tickTasks(dt) {
@@ -2328,6 +2597,25 @@ function startDormantPhase() {
       }
     }, 2000);
   });
+}
+
+function goUpDir() {
+  if (!G.currentNode || G.currentNode.id === 'root') return;
+  const parent = findParent(G.currentNode.id);
+  if (parent) {
+    G.currentNode = parent;
+    document.getElementById('cur-path').textContent = getPath(parent.id);
+    renderFSTree();
+    updateActionButtons();
+  }
+}
+
+function selectAllInDir() {
+  if (!G.currentNode) return;
+  const children = G.currentNode.children || [];
+  children.forEach(c => { if (canSelectForInfect(c)) G.selectedFiles.add(c.id); });
+  renderFSTree();
+  updateActionButtons();
 }
 
 function activatePayload(selfExec) {
