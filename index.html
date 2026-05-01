@@ -50,7 +50,7 @@
   #game {
     display: grid;
     grid-template-rows: 48px 1fr 32px;
-    grid-template-columns: 280px 1fr 260px;
+    grid-template-columns: 1fr 280px;
     height: 100vh;
     gap: 0;
   }
@@ -140,83 +140,22 @@
     opacity: 0.7;
   }
 
-  /* LEFT PANEL — FILESYSTEM */
+  /* LEFT PANEL — FULL TREE VIEW */
   #left-panel {
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    background: var(--bg2);
-    overflow: hidden;
+    display: none; /* removed */
   }
 
-  .panel-header {
-    padding: 8px 12px;
-    font-size: 10px;
-    color: var(--textdim);
-    border-bottom: 1px solid var(--border);
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    background: var(--bg3);
-  }
-
-  #fs-tree {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 0;
-    scrollbar-width: thin;
-    scrollbar-color: var(--green3) var(--dim);
-  }
-
-  .fs-item {
-    padding: 3px 8px 3px 0;
-    font-size: 12px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background 0.1s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    position: relative;
-  }
-
-  .fs-item:hover { background: var(--dim); }
-  .fs-item.selected { background: var(--green4); color: var(--green); }
-  .fs-item.infected { color: var(--green); }
-  .fs-item.clean { color: var(--dimtext); }
-  .fs-item.current-loc { border-left: 2px solid var(--green); }
-
-  .fs-icon { flex-shrink: 0; font-size: 10px; }
-
-  .fs-progress {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    height: 2px;
-    background: var(--amber);
-    transition: width 0.5s;
-  }
-
-  .fs-security-dot {
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    margin-left: auto;
-    margin-right: 4px;
-  }
-
-  /* MAIN VIEW */
+  /* MAIN TREE VIEW */
   #main-view {
     display: flex;
     flex-direction: column;
     overflow: hidden;
     background: var(--bg);
+    position: relative;
   }
 
   #path-bar {
-    padding: 6px 12px;
+    padding: 6px 16px;
     font-size: 11px;
     color: var(--textdim);
     border-bottom: 1px solid var(--border);
@@ -224,87 +163,173 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    flex-shrink: 0;
   }
 
   #path-bar span { color: var(--green2); }
 
-  #file-view {
+  /* THE TREE */
+  #tree-view {
     flex: 1;
     overflow-y: auto;
-    padding: 8px;
+    overflow-x: auto;
+    padding: 12px 8px;
     scrollbar-width: thin;
     scrollbar-color: var(--green3) var(--dim);
-  }
-
-  .file-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 8px;
-  }
-
-  .file-card {
-    border: 1px solid var(--dim);
-    background: var(--bg2);
-    padding: 8px;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-    overflow: hidden;
-    font-size: 11px;
-  }
-
-  .file-card:hover {
-    border-color: var(--green3);
-    background: var(--bg3);
-  }
-
-  .file-card.selected {
-    border-color: var(--green);
-    background: var(--green4);
-  }
-
-  .file-card.infected-file { border-color: var(--green3); }
-  .file-card.you { border-color: var(--cyan); box-shadow: 0 0 8px var(--cyan)33; }
-
-  .file-card-icon {
-    font-size: 22px;
-    display: block;
-    margin-bottom: 4px;
+    font-size: 13px;
     line-height: 1;
   }
 
-  .file-card-name {
+  .tree-row {
+    display: flex;
+    align-items: center;
+    padding: 3px 0;
+    position: relative;
+    white-space: nowrap;
+    cursor: default;
+    user-select: none;
+  }
+
+  /* connector lines drawn via pseudo + siblings */
+  .tree-connector {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    color: var(--green4);
+    font-size: 13px;
+    letter-spacing: 0;
+    font-family: 'Share Tech Mono', monospace;
+  }
+
+  .tree-node-inner {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 6px;
+    border-radius: 0;
+    transition: background 0.1s;
+    border: 1px solid transparent;
+  }
+
+  /* UNLOCKED / INFECTED */
+  .tree-row.unlocked .tree-node-inner {
+    cursor: pointer;
+  }
+  .tree-row.unlocked .tree-node-inner:hover {
+    background: var(--green4);
+    border-color: var(--green3);
+  }
+  .tree-row.unlocked .tree-name {
     color: var(--green2);
-    word-break: break-all;
-    line-height: 1.3;
-    margin-bottom: 2px;
   }
 
-  .file-card-meta {
-    color: var(--dimtext);
-    font-size: 10px;
+  /* YOU (the virus file) */
+  .tree-row.is-you .tree-node-inner {
+    border-color: var(--cyan);
+    background: #00ffcc08;
+    cursor: default;
+  }
+  .tree-row.is-you .tree-name {
+    color: var(--cyan);
+    text-shadow: 0 0 8px var(--cyan);
   }
 
-  .file-card-bar {
-    position: absolute;
-    bottom: 0;
-    left: 0;
+  /* SELECTED for infecting */
+  .tree-row.selected .tree-node-inner {
+    background: #ffaa0015;
+    border-color: var(--amber);
+  }
+  .tree-row.selected .tree-name { color: var(--amber); }
+
+  /* CURRENTLY BEING INFECTED */
+  .tree-row.infecting .tree-node-inner {
+    background: #ffaa0010;
+    border-color: var(--amber);
+    animation: infectpulse 1.2s infinite;
+  }
+  @keyframes infectpulse {
+    0%,100% { border-color: var(--amber); }
+    50% { border-color: var(--amber)66; }
+  }
+  .tree-row.infecting .tree-name { color: var(--amber); }
+
+  /* LOCKED / NOT YET INFECTED */
+  .tree-row.locked .tree-node-inner {
+    cursor: not-allowed;
+  }
+  .tree-row.locked .tree-name {
+    color: #1e3a1e;
+  }
+  .tree-row.locked .tree-icon {
+    opacity: 0.18;
+  }
+  .tree-row.locked .tree-connector {
+    color: #112211;
+  }
+
+  /* CURRENT FOCUS */
+  .tree-row.focused .tree-node-inner {
+    background: var(--green4);
+    border-color: var(--green);
+  }
+  .tree-row.focused .tree-name { color: var(--green); }
+
+  .tree-icon { font-size: 13px; flex-shrink: 0; }
+
+  .tree-name { font-family: 'Share Tech Mono', monospace; font-size: 12px; }
+
+  .tree-badges {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
+
+  .tbadge {
+    font-size: 9px;
+    padding: 1px 4px;
+    border: 1px solid;
+    font-family: 'Share Tech Mono', monospace;
+    letter-spacing: 0.5px;
+  }
+  .tbadge.infected  { color: var(--green3); border-color: var(--green3); }
+  .tbadge.infecting { color: var(--amber); border-color: var(--amber); }
+  .tbadge.secure    { color: var(--red); border-color: var(--red); opacity: 0.8; }
+  .tbadge.you       { color: var(--cyan); border-color: var(--cyan); }
+  .tbadge.data      { color: var(--cyan); border-color: var(--cyan)66; background: var(--cyan)11; }
+  .tbadge.terminal  { color: #aa66ff; border-color: #aa66ff66; }
+
+  .tree-infect-bar {
+    display: inline-block;
+    width: 50px;
     height: 3px;
+    background: var(--dim);
+    margin-left: 8px;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .tree-infect-bar-fill {
+    height: 100%;
     background: var(--amber);
-    transition: width 0.5s;
+    transition: width 0.4s;
   }
 
-  .file-card-badge {
-    position: absolute;
-    top: 3px;
-    right: 3px;
-    font-size: 8px;
-    padding: 1px 3px;
+  .tree-meta {
+    font-size: 10px;
+    color: #1e4a1e;
+    margin-left: 6px;
+    flex-shrink: 0;
   }
+  .tree-row.unlocked .tree-meta { color: var(--dimtext); }
+  .tree-row.is-you .tree-meta { color: #009988; }
 
-  .badge-infecting { background: var(--amber)33; color: var(--amber); border: 1px solid var(--amber); }
-  .badge-infected { background: var(--green4); color: var(--green); border: 1px solid var(--green3); }
-  .badge-secure { background: var(--red)22; color: var(--red); border: 1px solid var(--red)66; }
+  /* sec dots */
+  .tree-sec {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: 4px;
+  }
 
   /* TERMINAL VIEW */
   #terminal-view {
@@ -676,16 +701,20 @@
   .start-btn:hover:not(:disabled) { background: var(--green3); box-shadow: 0 0 20px var(--green4); }
   .start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
-  /* WAITING SCREEN */
+  /* WAITING SCREEN — overlays tree */
   #waiting-screen {
     display: none;
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    flex: 1;
     gap: 16px;
     text-align: center;
     padding: 32px;
+    background: #050a05cc;
+    z-index: 10;
+    backdrop-filter: blur(1px);
   }
 
   #waiting-screen.show { display: flex; }
@@ -844,27 +873,19 @@
     <div id="win-goal"></div>
   </div>
 
-  <!-- LEFT: FILESYSTEM TREE -->
-  <div id="left-panel">
-    <div class="panel-header">FILESYSTEM</div>
-    <div id="fs-tree"></div>
-  </div>
-
-  <!-- MAIN VIEW -->
+  <!-- MAIN TREE VIEW -->
   <div id="main-view">
-    <div id="path-bar">PATH: <span id="cur-path">/</span></div>
+    <div id="path-bar">PATH: <span id="cur-path">C:\Users\david_chen\Downloads</span></div>
 
-    <!-- WAITING SCREEN -->
+    <!-- WAITING SCREEN (overlays tree) -->
     <div id="waiting-screen">
       <div class="wt blink">WAITING FOR USER INTERACTION...</div>
-      <div class="wsub" id="waiting-desc">You are dormant inside <strong>Downloads/payload.exe</strong>.<br>You must wait for the user to open the file, or take a risk.</div>
+      <div class="wsub" id="waiting-desc">You are dormant inside <strong>Downloads/setup_crack.exe</strong>.<br>You must wait for the user to open the file, or take a risk.</div>
       <div id="waiting-choices"></div>
     </div>
 
-    <!-- FILE BROWSER -->
-    <div id="file-view">
-      <div class="file-grid" id="file-grid"></div>
-    </div>
+    <!-- FULL FILESYSTEM TREE -->
+    <div id="tree-view"></div>
 
     <!-- TERMINAL -->
     <div id="terminal-view">
@@ -1392,147 +1413,165 @@ function updateStats() {
 }
 
 // ============================================================
-// FILESYSTEM TREE RENDER
+// FULL FILESYSTEM TREE RENDER
 // ============================================================
 function renderFSTree() {
-  const el = document.getElementById('fs-tree');
+  const el = document.getElementById('tree-view');
+  if (!el || !fs) return;
   el.innerHTML = '';
-  if (!fs) return;
-  renderTreeNode(fs, el, 0);
+  renderTreeNodeNew(fs, el, [], true);
 }
 
-function renderTreeNode(node, container, depth) {
-  const div = document.createElement('div');
-  div.className = 'fs-item';
+// prefixParts: array of booleans — true = draw '│', false = draw ' '
+// isLast: whether this node is last in its parent's children list
+function renderTreeNodeNew(node, container, prefixParts, isLast) {
   const isInfected = G.infectedFiles.has(node.id) || node.isYou;
-  const isCurrent = G.currentNode?.id === node.id;
-
-  div.className = `fs-item ${isInfected ? 'infected' : 'clean'} ${isCurrent ? 'current-loc' : ''}`;
-  div.style.paddingLeft = (8 + depth * 14) + 'px';
-
   const task = G.tasks.find(t => t.targetId === node.id);
+  const isSelected = G.selectedFiles.has(node.id);
+  const isFocused = G.currentNode?.id === node.id;
+  const isScanned = G.scannedFiles.has(node.id);
 
-  let secDot = '';
-  if (G.scannedFiles.has(node.id)) {
-    const colors = ['#00aa22', '#ffaa00', '#ff4444', '#ff00ff'];
-    secDot = `<div class="fs-security-dot" style="background:${colors[node.security||0]}"></div>`;
+  // Build connector string
+  // Each prefix part: '│   ' or '    '
+  // Then for this node: '├── ' or '└── '
+  let connectorStr = '';
+  for (let i = 0; i < prefixParts.length; i++) {
+    connectorStr += prefixParts[i] ? '│   ' : '    ';
+  }
+  if (prefixParts.length > 0) {
+    connectorStr += isLast ? '└── ' : '├── ';
   }
 
-  div.innerHTML = `${typeIcon(node.type)} <span>${node.name}</span>${secDot}`;
+  // State classes
+  let stateClass = 'locked';
+  if (node.isYou) stateClass = 'is-you';
+  else if (isInfected) stateClass = 'unlocked';
+  if (isSelected && !node.isYou) stateClass += ' selected';
+  if (task) stateClass = 'unlocked infecting';
+  if (isFocused && isInfected) stateClass += ' focused';
+
+  // Badges
+  let badges = '';
+  if (node.isYou) badges += '<span class="tbadge you">YOU</span>';
+  else if (task) badges += `<span class="tbadge infecting">${task.progress.toFixed(0)}%</span>`;
+  else if (isInfected && node.type !== 'dir') badges += '<span class="tbadge infected">INFECTED</span>';
+  if (isScanned && node.security >= 3) badges += '<span class="tbadge secure">SECURED</span>';
+  if (isScanned && node.data) badges += `<span class="tbadge data">${node.data}MB</span>`;
+  if ((isInfected || node.isYou) && node.hasTerminal) badges += '<span class="tbadge terminal">TERM</span>';
+
+  // Infect progress bar
+  let progressBar = '';
   if (task) {
-    const bar = document.createElement('div');
-    bar.className = 'fs-progress';
-    bar.style.width = task.progress + '%';
-    div.appendChild(bar);
+    progressBar = `<div class="tree-infect-bar"><div class="tree-infect-bar-fill" style="width:${task.progress.toFixed(0)}%"></div></div>`;
   }
 
-  if (isInfected || node.isYou) {
-    div.addEventListener('click', () => navigateTo(node));
+  // Meta (size, sec)
+  let meta = '';
+  if (node.size) meta += fmtSize(node.size);
+  let secDot = '';
+  if (isScanned) {
+    const secColors = ['#00aa22','#ffaa00','#ff3333','#ff00ff'];
+    secDot = `<div class="tree-sec" style="background:${secColors[node.security||0]}"></div>`;
   }
 
-  container.appendChild(div);
+  const row = document.createElement('div');
+  row.className = `tree-row ${stateClass}`;
+  row.dataset.id = node.id;
 
-  if (node.children && (isInfected || node.isYou || node.id === 'root')) {
-    node.children.forEach(c => renderTreeNode(c, container, depth + 1));
+  row.innerHTML = `
+    <span class="tree-connector">${connectorStr}</span>
+    <div class="tree-node-inner">
+      <span class="tree-icon">${typeIcon(node.type)}</span>
+      <span class="tree-name">${node.name}</span>
+      ${secDot}
+      <div class="tree-badges">${badges}</div>
+      ${progressBar}
+    </div>
+    ${meta ? `<span class="tree-meta">${meta}</span>` : ''}
+  `;
+
+  // Click handler
+  if (node.isYou) {
+    // no-op, you can't click yourself
+  } else if (isInfected || task) {
+    row.querySelector('.tree-node-inner').addEventListener('click', () => handleTreeClick(node));
+  } else {
+    // Locked — clicking selects for infection
+    row.querySelector('.tree-node-inner').addEventListener('click', () => {
+      if (canSelectForInfect(node)) {
+        toggleSelect(node.id);
+      }
+    });
+  }
+
+  container.appendChild(row);
+
+  // Recurse into children
+  if (node.children) {
+    // Only show children if: parent is infected/you OR it's root OR parent is a known accessible dir
+    const showChildren = isInfected || node.isYou || node.id === 'root' || node.id === 'downloads';
+    const children = node.children;
+    children.forEach((child, i) => {
+      const childIsLast = i === children.length - 1;
+      // Build next prefix
+      const nextPrefix = prefixParts.length === 0
+        ? []
+        : [...prefixParts, !isLast];
+      if (showChildren) {
+        renderTreeNodeNew(child, container, nextPrefix.length === 0 && prefixParts.length === 0 ? [] : [...prefixParts, !isLast], childIsLast);
+      } else {
+        // Show locked children with dim prefix
+        renderTreeNodeNew(child, container, prefixParts.length === 0 ? [] : [...prefixParts, !isLast], childIsLast);
+      }
+    });
   }
 }
 
-// ============================================================
-// NAVIGATION
-// ============================================================
-function navigateTo(node) {
-  if (!node) return;
+function canSelectForInfect(node) {
+  // Can only select files in current infected directory
+  if (!G.currentNode) return false;
+  const parent = findParent(node.id);
+  if (!parent) return false;
+  return (G.infectedFiles.has(parent.id) || parent.isYou) && !G.infectedFiles.has(node.id);
+}
 
-  // Must be infected (or be you) to navigate
-  if (!G.infectedFiles.has(node.id) && !node.isYou && node.id !== 'downloads') return;
-
-  G.currentNode = node;
-  document.getElementById('cur-path').textContent = getPath(node.id);
-  document.getElementById('waiting-screen').classList.remove('show');
-  document.getElementById('file-view').style.display = '';
-  document.getElementById('terminal-view').style.display = 'none';
-
-  renderFileGrid(node);
+function toggleSelect(id) {
+  if (G.selectedFiles.has(id)) {
+    G.selectedFiles.delete(id);
+  } else {
+    G.selectedFiles.add(id);
+  }
   renderFSTree();
   updateActionButtons();
 }
 
-function renderFileGrid(node) {
-  const grid = document.getElementById('file-grid');
-  grid.innerHTML = '';
-
-  // Back button
-  const parent = findParent(node.id);
-  if (parent && G.infectedFiles.has(parent.id)) {
-    const back = document.createElement('div');
-    back.className = 'file-card';
-    back.innerHTML = `<span class="file-card-icon">↩</span><div class="file-card-name">.. [up]</div><div class="file-card-meta">parent dir</div>`;
-    back.addEventListener('click', () => navigateTo(parent));
-    grid.appendChild(back);
-  }
-
-  const items = node.children || [];
-  items.forEach(item => {
-    const card = document.createElement('div');
-    const isInfected = G.infectedFiles.has(item.id) || item.isYou;
-    const task = G.tasks.find(t => t.targetId === item.id);
-    const isSelected = G.selectedFiles.has(item.id);
-
-    let classes = 'file-card';
-    if (item.isYou) classes += ' you';
-    else if (isInfected) classes += ' infected-file';
-    if (isSelected) classes += ' selected';
-
-    card.className = classes;
-
-    let badge = '';
-    if (task) badge = '<div class="file-card-badge badge-infecting">INFECTING</div>';
-    else if (isInfected) badge = '<div class="file-card-badge badge-infected">INFECTED</div>';
-    else if (item.security >= 3 && G.scannedFiles.has(item.id)) badge = '<div class="file-card-badge badge-secure">SECURED</div>';
-
-    let meta = item.type.toUpperCase();
-    if (item.size) meta += ' · ' + fmtSize(item.size);
-    if (item.data && G.scannedFiles.has(item.id)) meta += ` <span class="data-indicator">${item.data}MB</span>`;
-
-    card.innerHTML = `
-      ${badge}
-      <span class="file-card-icon">${typeIcon(item.type)}</span>
-      <div class="file-card-name">${item.name}</div>
-      <div class="file-card-meta">${meta}</div>
-    `;
-
-    if (task) {
-      const bar = document.createElement('div');
-      bar.className = 'file-card-bar';
-      bar.style.width = task.progress + '%';
-      card.appendChild(bar);
-    }
-
-    card.addEventListener('click', () => handleFileClick(item));
-    grid.appendChild(card);
-  });
-}
-
-function handleFileClick(item) {
-  if (G.infectedFiles.has(item.id) || item.isYou) {
-    if (item.type === 'dir') {
-      navigateTo(item);
-    } else if (item.hasTerminal) {
-      openTerminalFor(item);
-    } else {
-      showFileInfo(item);
-    }
-  } else {
-    // Toggle selection for infecting
-    if (G.selectedFiles.has(item.id)) {
-      G.selectedFiles.delete(item.id);
-    } else {
-      G.selectedFiles.add(item.id);
-    }
-    renderFileGrid(G.currentNode);
+function handleTreeClick(node) {
+  if (node.type === 'dir') {
+    G.currentNode = node;
+    document.getElementById('cur-path').textContent = getPath(node.id);
+    renderFSTree();
     updateActionButtons();
+  } else if (node.hasTerminal) {
+    openTerminalFor(node);
+  } else {
+    showFileInfo(node);
   }
 }
+
+// legacy shim — keep navigateTo for dormant phase
+function navigateTo(node) {
+  if (!node) return;
+  G.currentNode = node;
+  document.getElementById('cur-path').textContent = getPath(node.id);
+  document.getElementById('waiting-screen').classList.remove('show');
+  document.getElementById('tree-view').style.display = '';
+  document.getElementById('terminal-view').style.display = 'none';
+  renderFSTree();
+  updateActionButtons();
+}
+
+// stub — no longer needed (tree is always visible)
+function renderFileGrid() {}
 
 function updateActionButtons() {
   const hasSelected = G.selectedFiles.size > 0;
