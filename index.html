@@ -1,0 +1,2358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAYLOAD.EXE — Virus Simulator</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+  :root {
+    --bg: #050a05;
+    --bg2: #0a120a;
+    --bg3: #0f1a0f;
+    --green: #00ff41;
+    --green2: #00cc33;
+    --green3: #008822;
+    --green4: #003311;
+    --red: #ff2244;
+    --amber: #ffaa00;
+    --blue: #00aaff;
+    --cyan: #00ffcc;
+    --dim: #1a2a1a;
+    --dimtext: #3a5a3a;
+    --border: #00aa2255;
+    --text: #00ff41;
+    --textdim: #339933;
+    --scanline: rgba(0,255,65,0.03);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, var(--scanline) 2px, var(--scanline) 4px);
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  #game {
+    display: grid;
+    grid-template-rows: 48px 1fr 32px;
+    grid-template-columns: 280px 1fr 260px;
+    height: 100vh;
+    gap: 0;
+  }
+
+  /* TOP BAR */
+  #topbar {
+    grid-column: 1 / -1;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 24px;
+    background: var(--bg2);
+  }
+
+  #topbar .logo {
+    font-family: 'Orbitron', monospace;
+    font-size: 13px;
+    font-weight: 900;
+    color: var(--green);
+    letter-spacing: 3px;
+    text-shadow: 0 0 10px var(--green3);
+  }
+
+  .stat-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  .stat-bar .label {
+    color: var(--textdim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    width: 70px;
+  }
+
+  .bar-wrap {
+    width: 80px;
+    height: 8px;
+    background: var(--dim);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    transition: width 0.3s;
+  }
+
+  .bar-fill.green { background: var(--green); }
+  .bar-fill.red { background: var(--red); }
+  .bar-fill.amber { background: var(--amber); }
+  .bar-fill.blue { background: var(--blue); }
+
+  .stat-bar .val {
+    min-width: 40px;
+    color: var(--green2);
+    font-size: 11px;
+  }
+
+  #detection-ring {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--textdim);
+  }
+
+  #detection-ring.warn { color: var(--amber); }
+  #detection-ring.danger { color: var(--red); animation: pulse 0.5s infinite; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  #win-goal {
+    margin-left: 16px;
+    font-size: 10px;
+    color: var(--cyan);
+    border: 1px solid var(--cyan);
+    padding: 2px 8px;
+    letter-spacing: 1px;
+    opacity: 0.7;
+  }
+
+  /* LEFT PANEL — FILESYSTEM */
+  #left-panel {
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 8px 12px;
+    font-size: 10px;
+    color: var(--textdim);
+    border-bottom: 1px solid var(--border);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    background: var(--bg3);
+  }
+
+  #fs-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green3) var(--dim);
+  }
+
+  .fs-item {
+    padding: 3px 8px 3px 0;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.1s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+  }
+
+  .fs-item:hover { background: var(--dim); }
+  .fs-item.selected { background: var(--green4); color: var(--green); }
+  .fs-item.infected { color: var(--green); }
+  .fs-item.clean { color: var(--dimtext); }
+  .fs-item.current-loc { border-left: 2px solid var(--green); }
+
+  .fs-icon { flex-shrink: 0; font-size: 10px; }
+
+  .fs-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: var(--amber);
+    transition: width 0.5s;
+  }
+
+  .fs-security-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 4px;
+  }
+
+  /* MAIN VIEW */
+  #main-view {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  #path-bar {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: var(--textdim);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  #path-bar span { color: var(--green2); }
+
+  #file-view {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green3) var(--dim);
+  }
+
+  .file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 8px;
+  }
+
+  .file-card {
+    border: 1px solid var(--dim);
+    background: var(--bg2);
+    padding: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+    font-size: 11px;
+  }
+
+  .file-card:hover {
+    border-color: var(--green3);
+    background: var(--bg3);
+  }
+
+  .file-card.selected {
+    border-color: var(--green);
+    background: var(--green4);
+  }
+
+  .file-card.infected-file { border-color: var(--green3); }
+  .file-card.you { border-color: var(--cyan); box-shadow: 0 0 8px var(--cyan)33; }
+
+  .file-card-icon {
+    font-size: 22px;
+    display: block;
+    margin-bottom: 4px;
+    line-height: 1;
+  }
+
+  .file-card-name {
+    color: var(--green2);
+    word-break: break-all;
+    line-height: 1.3;
+    margin-bottom: 2px;
+  }
+
+  .file-card-meta {
+    color: var(--dimtext);
+    font-size: 10px;
+  }
+
+  .file-card-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--amber);
+    transition: width 0.5s;
+  }
+
+  .file-card-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    font-size: 8px;
+    padding: 1px 3px;
+  }
+
+  .badge-infecting { background: var(--amber)33; color: var(--amber); border: 1px solid var(--amber); }
+  .badge-infected { background: var(--green4); color: var(--green); border: 1px solid var(--green3); }
+  .badge-secure { background: var(--red)22; color: var(--red); border: 1px solid var(--red)66; }
+
+  /* TERMINAL VIEW */
+  #terminal-view {
+    display: none;
+    flex-direction: column;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  #terminal-output {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green3) var(--dim);
+  }
+
+  .term-line { margin: 0; }
+  .term-line.cmd { color: var(--green); }
+  .term-line.out { color: var(--textdim); }
+  .term-line.err { color: var(--red); }
+  .term-line.sys { color: var(--cyan); }
+  .term-line.success { color: var(--green2); }
+  .term-line.warn { color: var(--amber); }
+
+  #terminal-input-line {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-top: 1px solid var(--border);
+    gap: 6px;
+  }
+
+  #terminal-prompt { color: var(--textdim); font-size: 12px; white-space: nowrap; }
+  #terminal-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--green);
+    font-family: inherit;
+    font-size: 12px;
+    caret-color: var(--green);
+  }
+
+  /* RIGHT PANEL — ACTIONS + LOG */
+  #right-panel {
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    background: var(--bg2);
+    overflow: hidden;
+  }
+
+  #action-panel {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .action-group-label {
+    font-size: 9px;
+    color: var(--dimtext);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+    margin-top: 4px;
+  }
+
+  .action-btn {
+    display: block;
+    width: 100%;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    background: var(--dim);
+    border: 1px solid var(--border);
+    color: var(--green2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.1s;
+    letter-spacing: 0.5px;
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: var(--green4);
+    border-color: var(--green3);
+    color: var(--green);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .action-btn.active {
+    background: var(--green4);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .action-btn .cost {
+    float: right;
+    color: var(--textdim);
+    font-size: 10px;
+  }
+
+  .action-btn.infect .cost { color: var(--amber); }
+  .action-btn.danger-btn { border-color: var(--red)44; color: var(--red)bb; }
+  .action-btn.danger-btn:hover:not(:disabled) { background: var(--red)11; border-color: var(--red); color: var(--red); }
+
+  #log-panel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px 8px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--green3) var(--dim);
+  }
+
+  .log-entry {
+    font-size: 10px;
+    line-height: 1.5;
+    padding: 2px 0;
+    border-bottom: 1px solid var(--dim);
+    color: var(--textdim);
+  }
+
+  .log-entry.info { color: var(--textdim); }
+  .log-entry.success { color: var(--green2); }
+  .log-entry.warn { color: var(--amber); }
+  .log-entry.danger { color: var(--red); }
+  .log-entry.system { color: var(--cyan); }
+  .log-entry .time { color: var(--dimtext); margin-right: 6px; }
+
+  /* STATUS BAR */
+  #statusbar {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding: 0 12px;
+    font-size: 10px;
+    color: var(--dimtext);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--bg3);
+  }
+
+  #statusbar .sep { color: var(--border); }
+
+  /* MODAL */
+  #modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000000cc;
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #modal-overlay.show { display: flex; }
+
+  #modal {
+    background: var(--bg2);
+    border: 1px solid var(--green3);
+    min-width: 340px;
+    max-width: 500px;
+    padding: 0;
+    box-shadow: 0 0 30px var(--green4);
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #modal-title {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-family: 'Orbitron', monospace;
+    color: var(--green);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  #modal-body {
+    padding: 14px;
+    font-size: 11px;
+    overflow-y: auto;
+    flex: 1;
+    line-height: 1.6;
+  }
+
+  #modal-body p { color: var(--textdim); margin-bottom: 8px; }
+  #modal-body .info-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid var(--dim); }
+  #modal-body .info-row .key { color: var(--dimtext); }
+  #modal-body .info-row .val { color: var(--green2); }
+  #modal-body .info-row .val.red { color: var(--red); }
+  #modal-body .info-row .val.amber { color: var(--amber); }
+
+  .modal-select-item {
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    border: 1px solid var(--dim);
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    transition: all 0.1s;
+  }
+
+  .modal-select-item:hover { background: var(--dim); border-color: var(--green3); }
+  .modal-select-item.selected { background: var(--green4); border-color: var(--green); color: var(--green); }
+
+  #modal-footer {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .modal-btn {
+    padding: 6px 14px;
+    background: var(--dim);
+    border: 1px solid var(--border);
+    color: var(--green2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s;
+  }
+
+  .modal-btn:hover { background: var(--green4); border-color: var(--green); color: var(--green); }
+  .modal-btn.primary { border-color: var(--green); color: var(--green); background: var(--green4); }
+  .modal-btn.primary:hover { background: var(--green3); }
+  .modal-btn.cancel { color: var(--textdim); }
+
+  .infect-type-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    margin-bottom: 6px;
+    background: var(--dim);
+    border: 1px solid var(--border);
+    color: var(--green2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.1s;
+  }
+
+  .infect-type-btn:hover { background: var(--green4); border-color: var(--green3); }
+  .infect-type-btn.sel { background: var(--green4); border-color: var(--green); color: var(--green); }
+  .infect-type-btn .desc { font-size: 9px; color: var(--textdim); margin-top: 2px; }
+
+  /* GAME OVER / WIN */
+  #endscreen {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: #000000ee;
+    z-index: 2000;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-family: 'Orbitron', monospace;
+    text-align: center;
+  }
+
+  #endscreen.show { display: flex; }
+  #endscreen .big { font-size: 32px; font-weight: 900; margin-bottom: 12px; letter-spacing: 4px; }
+  #endscreen.win .big { color: var(--green); text-shadow: 0 0 20px var(--green); }
+  #endscreen.lose .big { color: var(--red); text-shadow: 0 0 20px var(--red); }
+  #endscreen .sub { font-size: 14px; color: var(--textdim); margin-bottom: 24px; letter-spacing: 2px; }
+  #endscreen .restart-btn {
+    padding: 10px 28px;
+    background: var(--green4);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    letter-spacing: 2px;
+    transition: all 0.1s;
+  }
+  #endscreen .restart-btn:hover { background: var(--green3); }
+
+  /* INTRO SCREEN */
+  #intro {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    font-family: 'Orbitron', monospace;
+    text-align: center;
+  }
+
+  #intro .title {
+    font-size: 42px;
+    font-weight: 900;
+    color: var(--green);
+    letter-spacing: 6px;
+    text-shadow: 0 0 30px var(--green3);
+    margin-bottom: 6px;
+    animation: glitch 4s infinite;
+  }
+
+  @keyframes glitch {
+    0%,95%,100% { text-shadow: 0 0 30px var(--green3); transform: none; }
+    96% { transform: translate(-2px, 1px); text-shadow: -2px 0 var(--red), 2px 0 var(--blue); }
+    97% { transform: translate(2px, -1px); text-shadow: 2px 0 var(--red), -2px 0 var(--blue); }
+    98% { transform: none; }
+  }
+
+  #intro .sub { font-size: 13px; color: var(--textdim); letter-spacing: 3px; margin-bottom: 40px; }
+
+  .goal-pick {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 28px;
+    max-width: 500px;
+    width: 100%;
+  }
+
+  .goal-card {
+    border: 1px solid var(--border);
+    padding: 12px;
+    cursor: pointer;
+    text-align: left;
+    background: var(--bg2);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    transition: all 0.15s;
+  }
+
+  .goal-card:hover, .goal-card.sel {
+    background: var(--green4);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .goal-card .gname { font-size: 12px; color: var(--green2); margin-bottom: 4px; font-family: 'Orbitron', monospace; letter-spacing: 1px; }
+  .goal-card:hover .gname, .goal-card.sel .gname { color: var(--green); }
+  .goal-card .gdesc { color: var(--textdim); font-size: 10px; line-height: 1.4; }
+
+  .start-btn {
+    padding: 12px 32px;
+    background: var(--green4);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: 'Orbitron', monospace;
+    font-size: 14px;
+    cursor: pointer;
+    letter-spacing: 3px;
+    transition: all 0.15s;
+  }
+
+  .start-btn:hover:not(:disabled) { background: var(--green3); box-shadow: 0 0 20px var(--green4); }
+  .start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* WAITING SCREEN */
+  #waiting-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    gap: 16px;
+    text-align: center;
+    padding: 32px;
+  }
+
+  #waiting-screen.show { display: flex; }
+  #waiting-screen .wt { font-family: 'Orbitron', monospace; font-size: 14px; letter-spacing: 3px; color: var(--green); }
+  #waiting-screen .wsub { font-size: 11px; color: var(--textdim); line-height: 1.7; }
+
+  .choice-btn {
+    padding: 8px 20px;
+    background: var(--dim);
+    border: 1px solid var(--border);
+    color: var(--green2);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: all 0.1s;
+    margin: 4px;
+  }
+
+  .choice-btn:hover:not(:disabled) { background: var(--green4); border-color: var(--green); color: var(--green); }
+  .choice-btn.risk { border-color: var(--red)66; color: var(--red)bb; }
+  .choice-btn.risk:hover { background: var(--red)11; border-color: var(--red); color: var(--red); }
+
+  .blink { animation: blink 1s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* AV ALERT */
+  #av-alert {
+    display: none;
+    position: fixed;
+    top: 60px;
+    right: 16px;
+    background: var(--red)22;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 8px 14px;
+    font-size: 11px;
+    z-index: 500;
+    animation: pulse 0.5s infinite;
+    letter-spacing: 1px;
+  }
+
+  #av-alert.show { display: block; }
+
+  .progress-tasks {
+    margin-top: 8px;
+  }
+
+  .ptask {
+    padding: 5px 8px;
+    margin-bottom: 4px;
+    border: 1px solid var(--dim);
+    font-size: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ptask .pname { color: var(--textdim); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ptask .pbar-wrap { width: 60px; height: 4px; background: var(--dim); flex-shrink: 0; }
+  .ptask .pbar { height: 100%; background: var(--amber); }
+  .ptask .ppct { width: 30px; text-align: right; color: var(--amber); flex-shrink: 0; }
+
+  .sec-indicator {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 9px;
+    border: 1px solid;
+  }
+
+  .sec-low { color: var(--green3); border-color: var(--green3); }
+  .sec-med { color: var(--amber); border-color: var(--amber); }
+  .sec-high { color: var(--red); border-color: var(--red); }
+  .sec-max { color: #ff00ff; border-color: #ff00ff; }
+
+  .data-indicator {
+    display: inline-block;
+    padding: 1px 5px;
+    font-size: 9px;
+    background: var(--cyan)22;
+    color: var(--cyan);
+    border: 1px solid var(--cyan)66;
+    margin-left: 4px;
+  }
+
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--dim); }
+  ::-webkit-scrollbar-thumb { background: var(--green3); }
+</style>
+</head>
+<body>
+
+<!-- INTRO -->
+<div id="intro">
+  <div class="title">PAYLOAD.EXE</div>
+  <div class="sub">VIRUS SIMULATION v1.0 — SELECT OBJECTIVE</div>
+  <div class="goal-pick" id="goal-pick">
+    <div class="goal-card" data-goal="control">
+      <div class="gname">SYS CONTROL</div>
+      <div class="gdesc">Take over the entire operating system. Infect kernel, registry, and autostart.</div>
+    </div>
+    <div class="goal-card" data-goal="data">
+      <div class="gname">DATA THEFT</div>
+      <div class="gdesc">Exfiltrate 1GB of sensitive data. Find valuable files across the system.</div>
+    </div>
+    <div class="goal-card" data-goal="spread">
+      <div class="gname">PROPAGATE</div>
+      <div class="gdesc">Spread to 3 networked devices. Infect USB drives and network shares.</div>
+    </div>
+    <div class="goal-card" data-goal="encrypt">
+      <div class="gname">RANSOMWARE</div>
+      <div class="gdesc">Encrypt all user files. Must encrypt 80% of non-system files.</div>
+    </div>
+    <div class="goal-card" data-goal="network" style="grid-column: 1/-1;">
+      <div class="gname">NETWORK TAKEOVER</div>
+      <div class="gdesc">Compromise the network router and all connected services to own the LAN.</div>
+    </div>
+  </div>
+  <button class="start-btn" id="start-btn" disabled>[ DEPLOY PAYLOAD ]</button>
+</div>
+
+<!-- END SCREEN -->
+<div id="endscreen">
+  <div class="big" id="end-title"></div>
+  <div class="sub" id="end-sub"></div>
+  <button class="restart-btn" onclick="location.reload()">[ RESTART ]</button>
+</div>
+
+<!-- AV ALERT -->
+<div id="av-alert">⚠ ANTIVIRUS SCAN IN PROGRESS</div>
+
+<!-- MAIN GAME -->
+<div id="game">
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="logo">PAYLOAD.EXE</div>
+    <div class="stat-bar">
+      <span class="label">CPU</span>
+      <div class="bar-wrap"><div class="bar-fill amber" id="cpu-bar" style="width:5%"></div></div>
+      <span class="val" id="cpu-val">5%</span>
+    </div>
+    <div class="stat-bar">
+      <span class="label">DETECT</span>
+      <div class="bar-wrap"><div class="bar-fill red" id="det-bar" style="width:0%"></div></div>
+      <span class="val" id="det-val">0%</span>
+    </div>
+    <div class="stat-bar">
+      <span class="label">PROC</span>
+      <div class="bar-wrap"><div class="bar-fill blue" id="proc-bar" style="width:10%"></div></div>
+      <span class="val" id="proc-val">10</span>
+    </div>
+    <div id="detection-ring" id="av-status">
+      <span id="av-status-text">AV: IDLE</span>
+    </div>
+    <div id="win-goal"></div>
+  </div>
+
+  <!-- LEFT: FILESYSTEM TREE -->
+  <div id="left-panel">
+    <div class="panel-header">FILESYSTEM</div>
+    <div id="fs-tree"></div>
+  </div>
+
+  <!-- MAIN VIEW -->
+  <div id="main-view">
+    <div id="path-bar">PATH: <span id="cur-path">/</span></div>
+
+    <!-- WAITING SCREEN -->
+    <div id="waiting-screen">
+      <div class="wt blink">WAITING FOR USER INTERACTION...</div>
+      <div class="wsub" id="waiting-desc">You are dormant inside <strong>Downloads/payload.exe</strong>.<br>You must wait for the user to open the file, or take a risk.</div>
+      <div id="waiting-choices"></div>
+    </div>
+
+    <!-- FILE BROWSER -->
+    <div id="file-view">
+      <div class="file-grid" id="file-grid"></div>
+    </div>
+
+    <!-- TERMINAL -->
+    <div id="terminal-view">
+      <div id="terminal-output"></div>
+      <div id="terminal-input-line">
+        <span id="terminal-prompt">$ </span>
+        <input type="text" id="terminal-input" autocomplete="off" spellcheck="false" placeholder="type command...">
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: ACTIONS + LOG -->
+  <div id="right-panel">
+    <div id="action-panel">
+      <div class="action-group-label">ACTIONS</div>
+      <button class="action-btn infect" id="btn-infect" onclick="openInfectModal()">⬡ INFECT<span class="cost">CPU++</span></button>
+      <button class="action-btn" id="btn-scan" onclick="doScan()">◈ SCAN<span class="cost">5 CPU</span></button>
+      <button class="action-btn" id="btn-hide" onclick="doHide()">◌ HIDE<span class="cost">PAUSES</span></button>
+      <button class="action-btn danger-btn" id="btn-delete" onclick="doDelete()">✕ DELETE<span class="cost">+PROC</span></button>
+      <button class="action-btn" id="btn-encrypt" onclick="doEncrypt()" style="display:none">⬗ ENCRYPT<span class="cost">20 CPU</span></button>
+      <button class="action-btn" id="btn-exfil" onclick="doExfil()" style="display:none">▲ EXFIL<span class="cost">30 CPU</span></button>
+      <button class="action-btn" id="btn-term" onclick="openTerminal()" style="display:none">▶ OPEN TERMINAL</button>
+      <div class="action-group-label" style="margin-top:8px">TASKS</div>
+      <div class="progress-tasks" id="progress-tasks"></div>
+    </div>
+    <div class="panel-header">ACTIVITY LOG</div>
+    <div id="log-panel"></div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div id="statusbar">
+    <span id="status-files">INFECTED: 0</span>
+    <span class="sep">|</span>
+    <span id="status-data">DATA: 0 MB</span>
+    <span class="sep">|</span>
+    <span id="status-devices">DEVICES: 1</span>
+    <span class="sep">|</span>
+    <span id="status-goal">GOAL: —</span>
+    <span class="sep">|</span>
+    <span id="status-time">T+00:00</span>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal">
+    <div id="modal-title"></div>
+    <div id="modal-body"></div>
+    <div id="modal-footer"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// GAME STATE
+// ============================================================
+const G = {
+  running: false,
+  phase: 'dormant', // dormant, active, game_over, win
+  goal: null,
+  cpu: 5,
+  maxCpu: 100,
+  detection: 0,
+  proc: 10,
+  dataExfil: 0, // MB
+  encryptedFiles: 0,
+  totalUserFiles: 0,
+  devicesInfected: 1,
+  infectedFiles: new Set(),
+  scannedFiles: new Set(),
+  hiddenFiles: new Set(),
+  currentPath: null,
+  currentNode: null,
+  selectedFiles: new Set(),
+  tasks: [], // {id, targetId, type, method, progress, totalTime, fileName}
+  avActive: false,
+  avScanProgress: 0,
+  avTimer: null,
+  avInterval: 60000, // ms between scans
+  hiding: false,
+  hideNode: null,
+  startTime: Date.now(),
+  tickInterval: null,
+  taskInterval: null,
+  time: 0,
+  networkCompromised: false,
+  routerInfected: false,
+  kernelInfected: false,
+  registryInfected: false,
+  autorunSet: false,
+};
+
+// ============================================================
+// FILESYSTEM DEFINITION
+// ============================================================
+function makeFS() {
+  return {
+    id: 'root',
+    name: 'C:\\',
+    type: 'dir',
+    security: 1,
+    children: [
+      {
+        id: 'users',
+        name: 'Users',
+        type: 'dir',
+        security: 1,
+        children: [
+          {
+            id: 'user_home',
+            name: 'david_chen',
+            type: 'dir',
+            security: 1,
+            children: [
+              {
+                id: 'downloads',
+                name: 'Downloads',
+                type: 'dir',
+                security: 0,
+                isYou: false,
+                children: [
+                  { id: 'you', name: 'setup_crack.exe', type: 'exe', security: 0, size: 2.1, isYou: true },
+                  { id: 'dl_zip', name: 'movie_2024.zip', type: 'zip', security: 0, size: 4200 },
+                  { id: 'dl_pdf', name: 'invoice_march.pdf', type: 'pdf', security: 0, size: 0.8, data: 15 },
+                  { id: 'dl_setup', name: 'VLC_setup.exe', type: 'exe', security: 0, size: 32 },
+                  { id: 'dl_rar', name: 'photos_backup.rar', type: 'zip', security: 0, size: 890 },
+                ]
+              },
+              {
+                id: 'documents',
+                name: 'Documents',
+                type: 'dir',
+                security: 1,
+                children: [
+                  { id: 'doc_tax', name: 'tax_returns_2024.xlsx', type: 'doc', security: 1, size: 2.4, data: 45, sensitive: true },
+                  { id: 'doc_cv', name: 'CV_david_chen.docx', type: 'doc', security: 1, size: 0.3, data: 5 },
+                  { id: 'doc_pass', name: 'passwords_backup.txt', type: 'txt', security: 1, size: 0.02, data: 80, sensitive: true },
+                  { id: 'doc_contract', name: 'employment_contract.pdf', type: 'pdf', security: 1, size: 1.2, data: 30, sensitive: true },
+                  {
+                    id: 'dir_work',
+                    name: 'Work',
+                    type: 'dir',
+                    security: 2,
+                    children: [
+                      { id: 'work_db', name: 'client_database.xlsx', type: 'doc', security: 2, size: 45, data: 200, sensitive: true },
+                      { id: 'work_proj', name: 'project_alpha.docx', type: 'doc', security: 2, size: 3.2, data: 60 },
+                      { id: 'work_src', name: 'source_code.zip', type: 'zip', security: 2, size: 120, data: 100 },
+                      { id: 'work_creds', name: 'server_credentials.txt', type: 'txt', security: 2, size: 0.01, data: 150, sensitive: true },
+                    ]
+                  },
+                  {
+                    id: 'dir_personal',
+                    name: 'Personal',
+                    type: 'dir',
+                    security: 1,
+                    children: [
+                      { id: 'pers_photos', name: 'family_photos.zip', type: 'zip', security: 1, size: 3400, data: 10 },
+                      { id: 'pers_bank', name: 'bank_statements.pdf', type: 'pdf', security: 1, size: 2.1, data: 120, sensitive: true },
+                      { id: 'pers_wallet', name: 'crypto_wallet.dat', type: 'dat', security: 2, size: 0.5, data: 500, sensitive: true },
+                    ]
+                  }
+                ]
+              },
+              {
+                id: 'desktop',
+                name: 'Desktop',
+                type: 'dir',
+                security: 0,
+                children: [
+                  { id: 'desk_shortcut', name: 'Chrome.lnk', type: 'lnk', security: 0, size: 0.001 },
+                  { id: 'desk_notes', name: 'TO DO.txt', type: 'txt', security: 0, size: 0.003, data: 5 },
+                  { id: 'desk_budget', name: 'budget_2024.xlsx', type: 'doc', security: 0, size: 1.2, data: 40, sensitive: true },
+                  { id: 'desk_vpn', name: 'VPN_config.ovpn', type: 'dat', security: 0, size: 0.01, data: 20 },
+                ]
+              },
+              {
+                id: 'appdata',
+                name: 'AppData',
+                type: 'dir',
+                security: 2,
+                children: [
+                  {
+                    id: 'appdata_roaming',
+                    name: 'Roaming',
+                    type: 'dir',
+                    security: 2,
+                    children: [
+                      { id: 'app_chrome', name: 'Google', type: 'dir', security: 2,
+                        children: [
+                          { id: 'chrome_prefs', name: 'Default', type: 'dir', security: 2,
+                            children: [
+                              { id: 'chrome_cookies', name: 'Cookies', type: 'dat', security: 2, size: 1.8, data: 80, sensitive: true, hasTerminal: true },
+                              { id: 'chrome_logins', name: 'Login Data', type: 'dat', security: 2, size: 0.5, data: 200, sensitive: true },
+                              { id: 'chrome_hist', name: 'History', type: 'dat', security: 1, size: 2.1, data: 15 },
+                            ]
+                          }
+                        ]
+                      },
+                      { id: 'app_discord', name: 'discord', type: 'dir', security: 1,
+                        children: [
+                          { id: 'discord_token', name: 'Local Storage', type: 'dir', security: 1,
+                            children: [
+                              { id: 'discord_tok', name: 'leveldb_token.ldb', type: 'dat', security: 1, size: 0.1, data: 100, sensitive: true },
+                            ]
+                          }
+                        ]
+                      },
+                      { id: 'app_putty', name: 'PuTTY', type: 'dir', security: 1,
+                        children: [
+                          { id: 'putty_sessions', name: 'Sessions.reg', type: 'dat', security: 1, size: 0.02, data: 80, sensitive: true, hasTerminal: true },
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'windows',
+        name: 'Windows',
+        type: 'dir',
+        security: 3,
+        children: [
+          {
+            id: 'win_sys32',
+            name: 'System32',
+            type: 'dir',
+            security: 3,
+            children: [
+              { id: 'sys_kernel', name: 'ntoskrnl.exe', type: 'exe', security: 3, size: 9.8, isKernel: true },
+              { id: 'sys_winlog', name: 'winlogon.exe', type: 'exe', security: 3, size: 5.2 },
+              { id: 'sys_lsass', name: 'lsass.exe', type: 'exe', security: 3, size: 2.1, data: 300, sensitive: true },
+              { id: 'sys_svc', name: 'services.exe', type: 'exe', security: 3, size: 1.8 },
+              { id: 'sys_av', name: 'MsMpEng.exe', type: 'exe', security: 3, size: 4.4, isAV: true },
+            ]
+          },
+          {
+            id: 'win_reg',
+            name: 'Registry',
+            type: 'dir',
+            security: 3,
+            hasTerminal: true,
+            children: [
+              { id: 'reg_run', name: 'HKLM_Software_Run', type: 'dat', security: 3, size: 0.1, isAutorun: true },
+              { id: 'reg_pass', name: 'SAM', type: 'dat', security: 3, size: 0.5, data: 200, sensitive: true },
+              { id: 'reg_net', name: 'HKLM_System_Network', type: 'dat', security: 2, size: 0.2 },
+            ]
+          },
+          {
+            id: 'win_temp',
+            name: 'Temp',
+            type: 'dir',
+            security: 1,
+            children: [
+              { id: 'tmp1', name: 'tmp_8x92j.tmp', type: 'dat', security: 0, size: 0.4 },
+              { id: 'tmp2', name: 'install_log.txt', type: 'txt', security: 0, size: 0.1 },
+              { id: 'tmp3', name: 'crashdump.dmp', type: 'dat', security: 1, size: 512, data: 10 },
+            ]
+          }
+        ]
+      },
+      {
+        id: 'program_files',
+        name: 'Program Files',
+        type: 'dir',
+        security: 2,
+        children: [
+          {
+            id: 'pf_office',
+            name: 'Microsoft Office',
+            type: 'dir',
+            security: 2,
+            children: [
+              { id: 'office_exe', name: 'WINWORD.EXE', type: 'exe', security: 2, size: 18.4 },
+              { id: 'office_xl', name: 'EXCEL.EXE', type: 'exe', security: 2, size: 22.1 },
+              { id: 'office_temp', name: 'templates.dat', type: 'dat', security: 1, size: 4.5 },
+            ]
+          },
+          {
+            id: 'pf_wamp',
+            name: 'WampServer',
+            type: 'dir',
+            security: 2,
+            hasTerminal: true,
+            children: [
+              { id: 'wamp_mysql', name: 'mysql', type: 'dir', security: 2,
+                children: [
+                  { id: 'wamp_db', name: 'data', type: 'dir', security: 2,
+                    children: [
+                      { id: 'db_main', name: 'company_main.ibd', type: 'dat', security: 2, size: 240, data: 400, sensitive: true },
+                      { id: 'db_users', name: 'users.ibd', type: 'dat', security: 2, size: 45, data: 300, sensitive: true },
+                      { id: 'db_orders', name: 'orders.ibd', type: 'dat', security: 2, size: 180, data: 250, sensitive: true },
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'pf_vpn',
+            name: 'OpenVPN',
+            type: 'dir',
+            security: 2,
+            hasTerminal: true,
+            children: [
+              { id: 'vpn_conf', name: 'config', type: 'dir', security: 2,
+                children: [
+                  { id: 'vpn_key', name: 'client.key', type: 'dat', security: 2, size: 0.01, data: 100, sensitive: true },
+                  { id: 'vpn_cert', name: 'client.crt', type: 'dat', security: 2, size: 0.01, data: 50 },
+                  { id: 'vpn_ovpn', name: 'corp_vpn.ovpn', type: 'dat', security: 2, size: 0.02, data: 80, sensitive: true, hasTerminal: true },
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        id: 'network',
+        name: 'Network',
+        type: 'dir',
+        security: 2,
+        isNetwork: true,
+        children: [
+          {
+            id: 'net_shares',
+            name: 'Shared Drives',
+            type: 'dir',
+            security: 2,
+            children: [
+              { id: 'share_it', name: 'IT_Share', type: 'dir', security: 3,
+                children: [
+                  { id: 'it_scripts', name: 'admin_scripts.zip', type: 'zip', security: 3, size: 5.4, data: 100 },
+                  { id: 'it_sshkeys', name: 'ssh_keys.tar', type: 'zip', security: 3, size: 0.1, data: 200, sensitive: true },
+                ]
+              },
+              { id: 'share_common', name: 'Common', type: 'dir', security: 1,
+                children: [
+                  { id: 'com_templates', name: 'templates.zip', type: 'zip', security: 1, size: 12 },
+                  { id: 'com_reports', name: 'Q4_reports.xlsx', type: 'doc', security: 2, size: 8.4, data: 200, sensitive: true },
+                ]
+              }
+            ]
+          },
+          {
+            id: 'net_devices',
+            name: 'Network Devices',
+            type: 'dir',
+            security: 3,
+            children: [
+              { id: 'dev_router', name: 'ROUTER_192.168.1.1', type: 'device', security: 3, isRouter: true, hasTerminal: true },
+              { id: 'dev_nas', name: 'NAS_192.168.1.50', type: 'device', security: 2, isDevice: true, hasTerminal: true, data: 1000, sensitive: true },
+              { id: 'dev_laptop', name: 'LAPTOP-WK01', type: 'device', security: 2, isDevice: true, hasTerminal: true },
+              { id: 'dev_phone', name: 'ANDROID_david', type: 'device', security: 1, isDevice: true },
+              { id: 'dev_cam', name: 'IP_CAM_192.168.1.100', type: 'device', security: 1, isDevice: true },
+            ]
+          }
+        ]
+      },
+      {
+        id: 'recovery',
+        name: 'Recovery',
+        type: 'dir',
+        security: 3,
+        children: [
+          { id: 'rec_win', name: 'WindowsRE', type: 'dir', security: 3,
+            children: [
+              { id: 'rec_wim', name: 'winre.wim', type: 'dat', security: 3, size: 450 },
+            ]
+          }
+        ]
+      }
+    ]
+  };
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+let fs = null;
+const nodeMap = {};
+
+function buildNodeMap(node) {
+  nodeMap[node.id] = node;
+  if (node.children) node.children.forEach(buildNodeMap);
+}
+
+function findParent(targetId, node) {
+  if (!node) node = fs;
+  if (!node) return null;
+  if (node.children) {
+    for (const c of node.children) {
+      if (c.id === targetId) return node;
+      const p = findParent(targetId, c);
+      if (p) return p;
+    }
+  }
+  return null;
+}
+
+function getPath(nodeId) {
+  if (!fs) return '';
+  const parts = [];
+  let cur = nodeId;
+  while (cur) {
+    const n = nodeMap[cur];
+    if (!n) break;
+    parts.unshift(n.name);
+    const p = findParent(cur);
+    cur = p ? p.id : null;
+  }
+  return parts.join('\\').replace('C:\\\\', 'C:\\');
+}
+
+function secLabel(lvl) {
+  if (lvl === 0) return '<span class="sec-indicator sec-low">LOW</span>';
+  if (lvl === 1) return '<span class="sec-indicator sec-med">MED</span>';
+  if (lvl === 2) return '<span class="sec-indicator sec-high">HIGH</span>';
+  return '<span class="sec-indicator sec-max">MAX</span>';
+}
+
+function fmtSize(mb) {
+  if (mb >= 1000) return (mb/1000).toFixed(1) + ' GB';
+  if (mb >= 1) return mb.toFixed(1) + ' MB';
+  return (mb * 1024).toFixed(0) + ' KB';
+}
+
+function fmtTime(ms) {
+  const s = Math.floor(ms/1000);
+  const m = Math.floor(s/60);
+  return String(m).padStart(2,'0') + ':' + String(s%60).padStart(2,'0');
+}
+
+function typeIcon(type) {
+  const icons = {
+    dir: '📁', exe: '⚙', doc: '📄', txt: '📝', pdf: '📋',
+    zip: '📦', dat: '💾', lnk: '🔗', device: '💻'
+  };
+  return icons[type] || '📄';
+}
+
+let logCount = 0;
+function log(msg, cls = 'info') {
+  const el = document.getElementById('log-panel');
+  const t = fmtTime(Date.now() - G.startTime);
+  const div = document.createElement('div');
+  div.className = `log-entry ${cls}`;
+  div.innerHTML = `<span class="time">[${t}]</span>${msg}`;
+  el.insertBefore(div, el.firstChild);
+  logCount++;
+  if (logCount > 200) el.lastChild?.remove();
+}
+
+function updateStats() {
+  const cpuPct = Math.min(100, Math.round(G.cpu));
+  const detPct = Math.min(100, Math.round(G.detection));
+  const procNorm = Math.min(100, (G.proc / 200) * 100);
+
+  document.getElementById('cpu-bar').style.width = cpuPct + '%';
+  document.getElementById('cpu-val').textContent = cpuPct + '%';
+  document.getElementById('det-bar').style.width = detPct + '%';
+  document.getElementById('det-val').textContent = detPct + '%';
+  document.getElementById('proc-bar').style.width = procNorm + '%';
+  document.getElementById('proc-val').textContent = Math.round(G.proc);
+
+  const dr = document.getElementById('detection-ring');
+  const avt = document.getElementById('av-status-text');
+  if (detPct > 70) {
+    dr.className = 'detection-ring danger';
+    avt.textContent = '⚠ CRITICAL: ' + detPct + '%';
+  } else if (detPct > 40) {
+    dr.className = 'detection-ring warn';
+    avt.textContent = '⚡ DETECT: ' + detPct + '%';
+  } else {
+    dr.className = 'detection-ring';
+    avt.textContent = 'AV: IDLE';
+  }
+
+  document.getElementById('status-files').textContent = 'INFECTED: ' + G.infectedFiles.size;
+  document.getElementById('status-data').textContent = 'DATA: ' + fmtSize(G.dataExfil);
+  document.getElementById('status-devices').textContent = 'DEVICES: ' + G.devicesInfected;
+  document.getElementById('status-time').textContent = 'T+' + fmtTime(Date.now() - G.startTime);
+
+  const goalEl = document.getElementById('status-goal');
+  const winEl = document.getElementById('win-goal');
+  switch (G.goal) {
+    case 'control': {
+      const done = [G.kernelInfected, G.registryInfected, G.autorunSet].filter(Boolean).length;
+      goalEl.textContent = `GOAL: SYS CTRL ${done}/3`;
+      winEl.textContent = `OBJECTIVE: SYSTEM CONTROL (${done}/3)`;
+      if (done >= 3) triggerWin('SYSTEM CONTROL');
+      break;
+    }
+    case 'data': {
+      goalEl.textContent = `GOAL: DATA ${fmtSize(G.dataExfil)}/1GB`;
+      winEl.textContent = `OBJECTIVE: EXFIL 1GB (${fmtSize(G.dataExfil)})`;
+      if (G.dataExfil >= 1000) triggerWin('DATA THEFT');
+      break;
+    }
+    case 'spread': {
+      goalEl.textContent = `GOAL: SPREAD ${G.devicesInfected}/3`;
+      winEl.textContent = `OBJECTIVE: SPREAD TO 3 DEVICES (${G.devicesInfected})`;
+      if (G.devicesInfected >= 3) triggerWin('PROPAGATION');
+      break;
+    }
+    case 'encrypt': {
+      const pct = G.totalUserFiles > 0 ? Math.round((G.encryptedFiles / G.totalUserFiles) * 100) : 0;
+      goalEl.textContent = `GOAL: ENCRYPT ${pct}%`;
+      winEl.textContent = `OBJECTIVE: ENCRYPT FILES (${pct}%)`;
+      if (pct >= 80) triggerWin('RANSOMWARE');
+      break;
+    }
+    case 'network': {
+      const done2 = [G.routerInfected, G.networkCompromised].filter(Boolean).length;
+      goalEl.textContent = `GOAL: NETWORK ${done2}/2`;
+      winEl.textContent = `OBJECTIVE: NETWORK TAKEOVER (${done2}/2)`;
+      if (done2 >= 2) triggerWin('NETWORK TAKEOVER');
+      break;
+    }
+  }
+
+  if (detPct >= 100) triggerLose('DETECTED AND REMOVED BY ANTIVIRUS');
+}
+
+// ============================================================
+// FILESYSTEM TREE RENDER
+// ============================================================
+function renderFSTree() {
+  const el = document.getElementById('fs-tree');
+  el.innerHTML = '';
+  if (!fs) return;
+  renderTreeNode(fs, el, 0);
+}
+
+function renderTreeNode(node, container, depth) {
+  const div = document.createElement('div');
+  div.className = 'fs-item';
+  const isInfected = G.infectedFiles.has(node.id) || node.isYou;
+  const isCurrent = G.currentNode?.id === node.id;
+
+  div.className = `fs-item ${isInfected ? 'infected' : 'clean'} ${isCurrent ? 'current-loc' : ''}`;
+  div.style.paddingLeft = (8 + depth * 14) + 'px';
+
+  const task = G.tasks.find(t => t.targetId === node.id);
+
+  let secDot = '';
+  if (G.scannedFiles.has(node.id)) {
+    const colors = ['#00aa22', '#ffaa00', '#ff4444', '#ff00ff'];
+    secDot = `<div class="fs-security-dot" style="background:${colors[node.security||0]}"></div>`;
+  }
+
+  div.innerHTML = `${typeIcon(node.type)} <span>${node.name}</span>${secDot}`;
+  if (task) {
+    const bar = document.createElement('div');
+    bar.className = 'fs-progress';
+    bar.style.width = task.progress + '%';
+    div.appendChild(bar);
+  }
+
+  if (isInfected || node.isYou) {
+    div.addEventListener('click', () => navigateTo(node));
+  }
+
+  container.appendChild(div);
+
+  if (node.children && (isInfected || node.isYou || node.id === 'root')) {
+    node.children.forEach(c => renderTreeNode(c, container, depth + 1));
+  }
+}
+
+// ============================================================
+// NAVIGATION
+// ============================================================
+function navigateTo(node) {
+  if (!node) return;
+
+  // Must be infected (or be you) to navigate
+  if (!G.infectedFiles.has(node.id) && !node.isYou && node.id !== 'downloads') return;
+
+  G.currentNode = node;
+  document.getElementById('cur-path').textContent = getPath(node.id);
+  document.getElementById('waiting-screen').classList.remove('show');
+  document.getElementById('file-view').style.display = '';
+  document.getElementById('terminal-view').style.display = 'none';
+
+  renderFileGrid(node);
+  renderFSTree();
+  updateActionButtons();
+}
+
+function renderFileGrid(node) {
+  const grid = document.getElementById('file-grid');
+  grid.innerHTML = '';
+
+  // Back button
+  const parent = findParent(node.id);
+  if (parent && G.infectedFiles.has(parent.id)) {
+    const back = document.createElement('div');
+    back.className = 'file-card';
+    back.innerHTML = `<span class="file-card-icon">↩</span><div class="file-card-name">.. [up]</div><div class="file-card-meta">parent dir</div>`;
+    back.addEventListener('click', () => navigateTo(parent));
+    grid.appendChild(back);
+  }
+
+  const items = node.children || [];
+  items.forEach(item => {
+    const card = document.createElement('div');
+    const isInfected = G.infectedFiles.has(item.id) || item.isYou;
+    const task = G.tasks.find(t => t.targetId === item.id);
+    const isSelected = G.selectedFiles.has(item.id);
+
+    let classes = 'file-card';
+    if (item.isYou) classes += ' you';
+    else if (isInfected) classes += ' infected-file';
+    if (isSelected) classes += ' selected';
+
+    card.className = classes;
+
+    let badge = '';
+    if (task) badge = '<div class="file-card-badge badge-infecting">INFECTING</div>';
+    else if (isInfected) badge = '<div class="file-card-badge badge-infected">INFECTED</div>';
+    else if (item.security >= 3 && G.scannedFiles.has(item.id)) badge = '<div class="file-card-badge badge-secure">SECURED</div>';
+
+    let meta = item.type.toUpperCase();
+    if (item.size) meta += ' · ' + fmtSize(item.size);
+    if (item.data && G.scannedFiles.has(item.id)) meta += ` <span class="data-indicator">${item.data}MB</span>`;
+
+    card.innerHTML = `
+      ${badge}
+      <span class="file-card-icon">${typeIcon(item.type)}</span>
+      <div class="file-card-name">${item.name}</div>
+      <div class="file-card-meta">${meta}</div>
+    `;
+
+    if (task) {
+      const bar = document.createElement('div');
+      bar.className = 'file-card-bar';
+      bar.style.width = task.progress + '%';
+      card.appendChild(bar);
+    }
+
+    card.addEventListener('click', () => handleFileClick(item));
+    grid.appendChild(card);
+  });
+}
+
+function handleFileClick(item) {
+  if (G.infectedFiles.has(item.id) || item.isYou) {
+    if (item.type === 'dir') {
+      navigateTo(item);
+    } else if (item.hasTerminal) {
+      openTerminalFor(item);
+    } else {
+      showFileInfo(item);
+    }
+  } else {
+    // Toggle selection for infecting
+    if (G.selectedFiles.has(item.id)) {
+      G.selectedFiles.delete(item.id);
+    } else {
+      G.selectedFiles.add(item.id);
+    }
+    renderFileGrid(G.currentNode);
+    updateActionButtons();
+  }
+}
+
+function updateActionButtons() {
+  const hasSelected = G.selectedFiles.size > 0;
+  const inActiveDir = G.currentNode && (G.infectedFiles.has(G.currentNode.id) || G.currentNode.isYou);
+
+  document.getElementById('btn-infect').disabled = !hasSelected;
+  document.getElementById('btn-scan').disabled = !inActiveDir;
+  document.getElementById('btn-hide').disabled = !inActiveDir;
+  document.getElementById('btn-delete').disabled = G.selectedFiles.size !== 1;
+
+  if (G.goal === 'encrypt') document.getElementById('btn-encrypt').style.display = '';
+  if (G.goal === 'data') document.getElementById('btn-exfil').style.display = '';
+
+  document.getElementById('btn-encrypt').disabled = !hasSelected;
+  document.getElementById('btn-exfil').disabled = !hasSelected;
+
+  // Terminal button
+  const hasTerminalItems = G.currentNode?.children?.some(c =>
+    (G.infectedFiles.has(c.id) || c.isYou) && c.hasTerminal
+  ) || G.currentNode?.hasTerminal;
+  document.getElementById('btn-term').style.display = (hasTerminalItems || G.currentNode?.hasTerminal) ? '' : 'none';
+}
+
+// ============================================================
+// INFECT
+// ============================================================
+function openInfectModal() {
+  if (G.selectedFiles.size === 0) return;
+
+  let selectedInfectType = null;
+
+  const bodyHtml = `
+    <p>Select infection method for <strong>${G.selectedFiles.size}</strong> target(s):</p>
+    <button class="infect-type-btn" id="itype-quick" onclick="selectInfectType('quick')">
+      ⚡ QUICK INFECT
+      <div class="desc">Fast injection. High detection risk. Low CPU. 15-30 seconds.</div>
+    </button>
+    <button class="infect-type-btn" id="itype-silent" onclick="selectInfectType('silent')">
+      ◌ SILENT INFECT
+      <div class="desc">Slow and stealthy. Minimal detection. Medium CPU. 60-90 seconds.</div>
+    </button>
+    <button class="infect-type-btn" id="itype-deep" onclick="selectInfectType('deep')">
+      ⬡ DEEP INFECT
+      <div class="desc">Thorough rootkit-level infection. Best for high-security targets. 45-60s, high CPU.</div>
+    </button>
+    <div style="margin-top:12px; color:var(--textdim); font-size:10px;">
+      Selected targets: ${[...G.selectedFiles].map(id => nodeMap[id]?.name).join(', ')}
+    </div>
+  `;
+
+  showModal('INFECTION METHOD', bodyHtml, [
+    { label: 'CANCEL', action: closeModal, cls: 'cancel' },
+    { label: 'EXECUTE', action: () => {
+      const btn = document.querySelector('.infect-type-btn.sel');
+      if (!btn) { log('Select an infection method first', 'warn'); return; }
+      const method = btn.id.replace('itype-', '');
+      startInfection(method);
+      closeModal();
+    }, cls: 'primary' }
+  ]);
+}
+
+window.selectInfectType = function(type) {
+  document.querySelectorAll('.infect-type-btn').forEach(b => b.classList.remove('sel'));
+  document.getElementById('itype-' + type).classList.add('sel');
+};
+
+function startInfection(method) {
+  const times = { quick: [15, 30], silent: [60, 90], deep: [45, 60] };
+  const detRisk = { quick: 15, silent: 2, deep: 6 };
+  const cpuCost = { quick: 5, silent: 8, deep: 18 };
+
+  [...G.selectedFiles].forEach(id => {
+    const node = nodeMap[id];
+    if (!node || G.infectedFiles.has(id)) return;
+
+    const [min, max] = times[method];
+    const baseSec = min + Math.random() * (max - min);
+    const secMult = 1 + (node.security || 0) * 0.8;
+    const totalSec = baseSec * secMult;
+
+    G.tasks.push({
+      id: 'task_' + Date.now() + Math.random(),
+      targetId: id,
+      type: 'infect',
+      method,
+      progress: 0,
+      totalTime: totalSec,
+      elapsed: 0,
+      fileName: node.name
+    });
+
+    G.cpu = Math.min(100, G.cpu + cpuCost[method]);
+    G.detection += detRisk[method] * (node.security + 1) * 0.1;
+
+    log(`Infecting ${node.name} [${method.toUpperCase()}] — ETA: ${totalSec.toFixed(0)}s`, 'warn');
+  });
+
+  G.selectedFiles.clear();
+  renderFileGrid(G.currentNode);
+  renderFSTree();
+  updateActionButtons();
+}
+
+// ============================================================
+// SCAN
+// ============================================================
+function doScan() {
+  if (!G.currentNode || (!G.infectedFiles.has(G.currentNode.id) && !G.currentNode.isYou)) return;
+  const children = G.currentNode.children || [];
+  children.forEach(c => G.scannedFiles.add(c.id));
+  G.cpu = Math.min(100, G.cpu + 5);
+  G.detection += 1;
+  log(`Scanned ${children.length} files in ${G.currentNode.name}`, 'success');
+  renderFileGrid(G.currentNode);
+  updateStats();
+}
+
+// ============================================================
+// HIDE
+// ============================================================
+function doHide() {
+  if (G.hiding) {
+    G.hiding = false;
+    G.hideNode = null;
+    log('Hiding stopped — resuming activity', 'info');
+    document.getElementById('btn-hide').textContent = '◌ HIDE';
+    document.getElementById('btn-hide').classList.remove('active');
+  } else {
+    G.hiding = true;
+    G.hideNode = G.currentNode;
+    log('Hiding in ' + G.currentNode.name + ' — all tasks paused', 'warn');
+    document.getElementById('btn-hide').innerHTML = '◌ STOP HIDING<span class="cost">ACTIVE</span>';
+    document.getElementById('btn-hide').classList.add('active');
+  }
+}
+
+// ============================================================
+// DELETE
+// ============================================================
+function doDelete() {
+  if (G.selectedFiles.size !== 1) return;
+  const id = [...G.selectedFiles][0];
+  const node = nodeMap[id];
+  if (!node) return;
+
+  const gainProc = Math.round((node.size || 1) * 0.5 + Math.random() * 5);
+  showModal('CONFIRM DELETE', `
+    <div class="info-row"><span class="key">Target</span><span class="val">${node.name}</span></div>
+    <div class="info-row"><span class="key">Size</span><span class="val">${fmtSize(node.size || 0)}</span></div>
+    <div class="info-row"><span class="key">PROC Gain</span><span class="val">+${gainProc}</span></div>
+    <p style="margin-top:10px; color:var(--red)">⚠ This action is permanent and may increase detection.</p>
+  `, [
+    { label: 'CANCEL', action: closeModal, cls: 'cancel' },
+    { label: 'DELETE', action: () => {
+      G.proc += gainProc;
+      G.detection += 5;
+      // Remove from parent
+      const parent = findParent(id);
+      if (parent) parent.children = parent.children.filter(c => c.id !== id);
+      G.selectedFiles.clear();
+      G.infectedFiles.delete(id);
+      log(`Deleted ${node.name} — gained ${gainProc} PROC`, 'danger');
+      renderFileGrid(G.currentNode);
+      renderFSTree();
+      updateStats();
+      closeModal();
+    }, cls: 'danger-btn' }
+  ]);
+}
+
+// ============================================================
+// ENCRYPT
+// ============================================================
+function doEncrypt() {
+  if (G.selectedFiles.size === 0) return;
+  [...G.selectedFiles].forEach(id => {
+    const node = nodeMap[id];
+    if (!node || node.type === 'dir') return;
+    if (node.type !== 'exe' && node.type !== 'dat' || node.type !== 'exe') {
+      G.encryptedFiles++;
+    }
+    node.name = '🔒 ' + node.name + '.locked';
+    G.infectedFiles.add(id);
+    G.detection += 3;
+    log(`Encrypted ${node.name}`, 'warn');
+  });
+  G.cpu = Math.min(100, G.cpu + 20);
+  G.selectedFiles.clear();
+  renderFileGrid(G.currentNode);
+  updateStats();
+}
+
+// ============================================================
+// EXFILTRATE
+// ============================================================
+function doExfil() {
+  if (G.selectedFiles.size === 0) return;
+  let total = 0;
+  [...G.selectedFiles].forEach(id => {
+    const node = nodeMap[id];
+    if (!node || !node.data) return;
+    total += node.data;
+    G.detection += 4;
+    log(`Exfiltrating ${node.name} (+${node.data}MB)`, 'success');
+  });
+  G.dataExfil += total;
+  G.cpu = Math.min(100, G.cpu + 15);
+  G.selectedFiles.clear();
+  renderFileGrid(G.currentNode);
+  updateStats();
+}
+
+// ============================================================
+// TERMINAL
+// ============================================================
+let terminalTarget = null;
+let termHistory = [];
+let termOutput = [];
+
+function openTerminal() {
+  const node = G.currentNode;
+  if (!node) return;
+  openTerminalFor(node);
+}
+
+function openTerminalFor(node) {
+  terminalTarget = node;
+  document.getElementById('file-view').style.display = 'none';
+  document.getElementById('terminal-view').style.display = 'flex';
+  document.getElementById('waiting-screen').classList.remove('show');
+
+  const out = document.getElementById('terminal-output');
+  out.innerHTML = '';
+  const ctx = termContext(node);
+  termPrint(ctx.banner, 'sys');
+  ctx.intro.forEach(l => termPrint(l, 'out'));
+  document.getElementById('terminal-prompt').textContent = ctx.prompt;
+  document.getElementById('terminal-input').focus();
+}
+
+function termContext(node) {
+  if (node.id === 'dev_router' || node.isRouter) {
+    return {
+      banner: '=== CONNECTED: TP-Link Router Telnet Interface ===',
+      intro: ['Firmware: v2.3.4', 'Model: Archer AX73', 'IP: 192.168.1.1', ''],
+      prompt: 'admin@router> ',
+      commands: routerCommands
+    };
+  }
+  if (node.id === 'win_reg' || node.name === 'Registry') {
+    return {
+      banner: '=== WINDOWS REGISTRY EDITOR v5.1 ===',
+      intro: ['HKEY_LOCAL_MACHINE\\', 'HKEY_CURRENT_USER\\', ''],
+      prompt: 'regedit> ',
+      commands: registryCommands
+    };
+  }
+  if (node.id === 'pf_wamp' || node.name === 'WampServer') {
+    return {
+      banner: '=== MySQL 8.0 Console ===',
+      intro: ['Connected to: localhost', 'Version: 8.0.31', ''],
+      prompt: 'mysql> ',
+      commands: mysqlCommands
+    };
+  }
+  if (node.isDevice) {
+    return {
+      banner: `=== SSH CONNECTION: ${node.name} ===`,
+      intro: ['OpenSSH_8.4p1', 'Warning: Spoofed credentials used', ''],
+      prompt: `root@${node.name.toLowerCase()}:~# `,
+      commands: sshCommands(node)
+    };
+  }
+  return {
+    banner: '=== SYSTEM SHELL ===',
+    intro: ['Connected via injected payload', ''],
+    prompt: 'C:\\> ',
+    commands: shellCommands
+  };
+}
+
+function termPrint(line, cls = 'out') {
+  const out = document.getElementById('terminal-output');
+  const p = document.createElement('p');
+  p.className = 'term-line ' + cls;
+  p.textContent = line;
+  out.appendChild(p);
+  out.scrollTop = out.scrollHeight;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('terminal-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      const inp = document.getElementById('terminal-input');
+      const cmd = inp.value.trim();
+      inp.value = '';
+      if (!cmd) return;
+      termHistory.push(cmd);
+      const prompt = document.getElementById('terminal-prompt').textContent;
+      termPrint(prompt + cmd, 'cmd');
+      handleTermCommand(cmd);
+    }
+  });
+});
+
+function handleTermCommand(cmd) {
+  const ctx = termContext(terminalTarget);
+  const parts = cmd.toLowerCase().trim().split(/\s+/);
+  const base = parts[0];
+
+  if (base === 'exit' || base === 'back') {
+    document.getElementById('terminal-view').style.display = 'none';
+    document.getElementById('file-view').style.display = '';
+    return;
+  }
+  if (base === 'help') {
+    Object.keys(ctx.commands).forEach(k => termPrint('  ' + k + ' — ' + ctx.commands[k].help));
+    return;
+  }
+  if (ctx.commands[base]) {
+    ctx.commands[base].fn(parts.slice(1));
+  } else {
+    termPrint('Command not found: ' + base, 'err');
+    termPrint('Type "help" for available commands.', 'out');
+  }
+}
+
+const shellCommands = {
+  dir: { help: 'List directory', fn: () => {
+    const c = G.currentNode?.children || [];
+    c.forEach(ch => termPrint(`  ${ch.type === 'dir' ? '<DIR>' : '     '} ${ch.name}`));
+  }},
+  whoami: { help: 'Current user', fn: () => termPrint('NT AUTHORITY\\SYSTEM') },
+  ipconfig: { help: 'Network config', fn: () => {
+    termPrint('Ethernet adapter:');
+    termPrint('  IPv4: 192.168.1.105');
+    termPrint('  Subnet: 255.255.255.0');
+    termPrint('  Gateway: 192.168.1.1');
+    termPrint('  DNS: 8.8.8.8');
+  }},
+  tasklist: { help: 'Running processes', fn: () => {
+    ['System (PID 4)', 'csrss.exe (PID 488)', 'winlogon.exe (PID 516)', 'services.exe (PID 600)', 'MsMpEng.exe (PID 1204)', 'chrome.exe (PID 4821)', 'WINWORD.EXE (PID 5034)', 'setup_crack.exe (PID 7788)'].forEach(p => termPrint('  ' + p));
+  }},
+  net: { help: 'Network commands', fn: (args) => {
+    if (args[0] === 'view') {
+      termPrint('Server Name       Remark');
+      termPrint('\\\\DESKTOP-david    David\'s Desktop');
+      termPrint('\\\\LAPTOP-WK01      Work Laptop');
+      termPrint('\\\\NAS-SERVER       Network Storage');
+    }
+  }},
+  reg: { help: 'Registry query', fn: (args) => {
+    if (args[0] === 'add' && args.join(' ').includes('run')) {
+      G.autorunSet = true;
+      G.detection += 8;
+      termPrint('The operation completed successfully.', 'success');
+      log('Autorun registry key set — persistence established!', 'success');
+      updateStats();
+    } else {
+      termPrint('Usage: reg add HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run /v payload /t REG_SZ /d C:\\payload.exe');
+    }
+  }},
+};
+
+const registryCommands = {
+  ls: { help: 'List keys', fn: () => {
+    ['HKLM\\Software\\Microsoft\\Windows NT\\CurrentVersion', 'HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', 'HKLM\\System\\CurrentControlSet\\Services', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer'].forEach(k => termPrint('  ' + k));
+  }},
+  get: { help: 'Read a key value', fn: (args) => {
+    if (!args.length) return termPrint('Usage: get <key>', 'err');
+    termPrint('Value: (binary data)', 'out');
+  }},
+  set: { help: 'Set persistence key', fn: (args) => {
+    if (args.join(' ').includes('run') || args[0] === 'HKLM') {
+      G.registryInfected = true;
+      G.detection += 10;
+      termPrint('Registry key written. Payload will execute on next boot.', 'success');
+      log('Registry persistence set in HKLM\\Run', 'success');
+      updateStats();
+    } else {
+      termPrint('Key path accepted.', 'out');
+    }
+  }},
+  infect_kernel: { help: 'Inject into kernel', fn: () => {
+    if (G.proc < 30) { termPrint('Insufficient processing power. Need 30.', 'err'); return; }
+    G.proc -= 30;
+    G.kernelInfected = true;
+    G.detection += 20;
+    termPrint('Kernel module injected. Ring-0 access granted.', 'success');
+    termPrint('ntoskrnl.exe patched.', 'success');
+    log('KERNEL INFECTED — Ring-0 access!', 'danger');
+    updateStats();
+  }},
+};
+
+const routerCommands = {
+  show: { help: 'Show config/interfaces', fn: (args) => {
+    if (args[0] === 'interfaces') {
+      termPrint('eth0: 192.168.1.1/24 UP');
+      termPrint('eth1: 87.45.213.88/30 UP (WAN)');
+      termPrint('wlan0: 192.168.1.1 (SSID: HomeNetwork)');
+    } else if (args[0] === 'arp') {
+      termPrint('192.168.1.100  00:1A:2B:3C:4D:5E  (IP_CAM)');
+      termPrint('192.168.1.50   00:AA:BB:CC:DD:EE  (NAS)');
+      termPrint('192.168.1.101  AA:BB:CC:DD:EE:01  (LAPTOP-WK01)');
+      termPrint('192.168.1.102  AA:BB:CC:DD:EE:02  (ANDROID_david)');
+    } else {
+      termPrint('Subcommands: interfaces, arp, routes');
+    }
+  }},
+  dns_poison: { help: 'Inject rogue DNS', fn: () => {
+    G.proc -= 20; G.detection += 12;
+    G.networkCompromised = true;
+    termPrint('DNS cache poisoned. All traffic redirected.', 'success');
+    log('DNS poisoning complete — network traffic hijacked', 'success');
+    updateStats();
+  }},
+  port_forward: { help: 'Set up reverse tunnel', fn: () => {
+    G.proc -= 10;
+    termPrint('Port 4444 → 192.168.1.105:4444 forwarded', 'success');
+    log('C2 reverse tunnel established via router', 'success');
+  }},
+  infect_firmware: { help: 'Flash malicious firmware', fn: () => {
+    if (G.proc < 40) { termPrint('Need 40 PROC.', 'err'); return; }
+    G.proc -= 40; G.detection += 25;
+    G.routerInfected = true;
+    termPrint('Firmware upload in progress...', 'warn');
+    setTimeout(() => {
+      termPrint('Firmware flashed. Persistent backdoor installed.', 'success');
+      log('ROUTER COMPROMISED — persistent firmware backdoor', 'danger');
+      updateStats();
+    }, 2000);
+  }},
+  scan_network: { help: 'Enumerate LAN devices', fn: () => {
+    termPrint('Scanning 192.168.1.0/24...');
+    setTimeout(() => {
+      ['192.168.1.1 (router)', '192.168.1.50 (NAS)', '192.168.1.100 (IP Cam)', '192.168.1.101 (Laptop)', '192.168.1.102 (Android)'].forEach(d => termPrint('  ONLINE: ' + d, 'success'));
+    }, 500);
+  }},
+};
+
+const mysqlCommands = {
+  'show databases': { help: 'List databases', fn: () => {
+    ['information_schema', 'company_main', 'users', 'orders', 'mysql'].forEach(d => termPrint('  ' + d));
+  }},
+  'show tables': { help: 'List tables', fn: () => {
+    ['employees', 'clients', 'financials', 'auth_tokens', 'admin_accounts'].forEach(t => termPrint('  ' + t));
+  }},
+  select: { help: 'Query data', fn: (args) => {
+    if (args.join(' ').includes('admin_accounts') || args.join(' ').includes('auth_tokens')) {
+      termPrint('id | username | password_hash | email');
+      termPrint('1  | admin    | $2b$12$xyzABC.. | admin@corp.com');
+      termPrint('2  | david    | $2b$12$defGHI.. | david@corp.com');
+      G.dataExfil += 50; G.detection += 5;
+      log('DB credentials dumped +50MB', 'success');
+      updateStats();
+    } else {
+      termPrint('[result set with ' + Math.floor(Math.random()*200+10) + ' rows]');
+    }
+  }},
+  dump: { help: 'Dump full database', fn: () => {
+    if (G.proc < 15) { termPrint('Need 15 PROC', 'err'); return; }
+    G.proc -= 15; G.dataExfil += 400; G.detection += 15;
+    termPrint('mysqldump in progress...', 'warn');
+    setTimeout(() => termPrint('Dump complete: 400MB exfiltrated', 'success'), 800);
+    log('MySQL full dump — +400MB exfiltrated', 'success');
+    updateStats();
+  }},
+};
+
+function sshCommands(node) {
+  return {
+    ls: { help: 'List files', fn: () => {
+      if (node.id === 'dev_nas') {
+        ['/data/backups', '/data/media', '/data/company_docs', '/data/surveillance_footage'].forEach(f => termPrint(f));
+      } else {
+        ['/home/user', '/var/www', '/etc', '/tmp'].forEach(f => termPrint(f));
+      }
+    }},
+    cat: { help: 'Read file', fn: (args) => {
+      if (args.join('').includes('shadow') || args.join('').includes('passwd')) {
+        termPrint('root:$6$salt$hashedpassword...');
+        termPrint('david:$6$salt2$hashedpassword2...');
+        G.dataExfil += 5; G.detection += 3;
+        log('/etc/shadow dumped +5MB', 'success');
+        updateStats();
+      } else {
+        termPrint('[file contents]');
+      }
+    }},
+    infect: { help: 'Plant payload on this device', fn: () => {
+      if (G.proc < 20) { termPrint('Need 20 PROC', 'err'); return; }
+      G.proc -= 20;
+      G.devicesInfected++;
+      G.infectedFiles.add(node.id);
+      G.detection += 10;
+      termPrint('Payload uploaded and executed.', 'success');
+      termPrint('Device ' + node.name + ' now under control.', 'success');
+      log(`New device infected: ${node.name} (${G.devicesInfected} total)`, 'success');
+      renderFSTree();
+      updateStats();
+    }},
+    wget: { help: 'Download file', fn: () => {
+      G.dataExfil += 30; G.detection += 4;
+      termPrint('File downloaded — 30MB staged', 'success');
+      updateStats();
+    }},
+    exit: { help: 'Close SSH', fn: () => {
+      document.getElementById('terminal-view').style.display = 'none';
+      document.getElementById('file-view').style.display = '';
+    }},
+  };
+}
+
+// ============================================================
+// MODAL
+// ============================================================
+function showModal(title, bodyHtml, buttons) {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-body').innerHTML = bodyHtml;
+  const footer = document.getElementById('modal-footer');
+  footer.innerHTML = '';
+  buttons.forEach(b => {
+    const btn = document.createElement('button');
+    btn.className = 'modal-btn ' + (b.cls || '');
+    btn.textContent = b.label;
+    btn.onclick = b.action;
+    footer.appendChild(btn);
+  });
+  document.getElementById('modal-overlay').classList.add('show');
+}
+
+function closeModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('show');
+}
+
+// ============================================================
+// FILE INFO
+// ============================================================
+function showFileInfo(item) {
+  let html = `
+    <div class="info-row"><span class="key">Name</span><span class="val">${item.name}</span></div>
+    <div class="info-row"><span class="key">Type</span><span class="val">${item.type.toUpperCase()}</span></div>
+    <div class="info-row"><span class="key">Size</span><span class="val">${fmtSize(item.size || 0)}</span></div>
+    <div class="info-row"><span class="key">Security</span><span class="val">${secLabel(item.security || 0)}</span></div>
+  `;
+  if (item.data) html += `<div class="info-row"><span class="key">Data Value</span><span class="val amber">${item.data} MB</span></div>`;
+  if (item.sensitive) html += `<div class="info-row"><span class="key">Contains</span><span class="val red">SENSITIVE DATA</span></div>`;
+  if (item.hasTerminal) html += `<p style="margin-top:8px; color:var(--cyan)">→ This file has an interactive terminal.</p>`;
+
+  showModal('FILE: ' + item.name, html, [
+    { label: 'CLOSE', action: closeModal },
+    ...(item.hasTerminal ? [{ label: 'OPEN TERMINAL', action: () => { closeModal(); openTerminalFor(item); }, cls: 'primary' }] : [])
+  ]);
+}
+
+// ============================================================
+// TASK ENGINE
+// ============================================================
+function tickTasks(dt) {
+  if (G.hiding) return;
+
+  const completedTasks = [];
+  G.tasks.forEach(task => {
+    task.elapsed += dt;
+    task.progress = Math.min(100, (task.elapsed / task.totalTime) * 100);
+
+    if (task.progress >= 100) completedTasks.push(task);
+  });
+
+  completedTasks.forEach(task => {
+    G.tasks = G.tasks.filter(t => t.id !== task.id);
+    const node = nodeMap[task.targetId];
+    if (!node) return;
+
+    G.infectedFiles.add(task.targetId);
+    // Also infect parent dirs if needed
+    const parent = findParent(task.targetId);
+    if (parent) G.infectedFiles.add(parent.id);
+
+    // Reduce CPU
+    G.cpu = Math.max(5, G.cpu - 10);
+
+    // Track kernel/registry
+    if (node.isKernel) G.kernelInfected = true;
+    if (node.isAutorun) G.autorunSet = true;
+
+    log(`✓ Infected: ${node.name}`, 'success');
+
+    if (G.currentNode) renderFileGrid(G.currentNode);
+    renderFSTree();
+    updateStats();
+  });
+
+  renderTasksPanel();
+}
+
+function renderTasksPanel() {
+  const el = document.getElementById('progress-tasks');
+  if (G.tasks.length === 0) {
+    el.innerHTML = '<div style="font-size:10px; color:var(--dimtext); padding:4px 0;">No active tasks</div>';
+    return;
+  }
+  el.innerHTML = G.tasks.map(t => `
+    <div class="ptask">
+      <span class="pname">${t.fileName}</span>
+      <div class="pbar-wrap"><div class="pbar" style="width:${t.progress.toFixed(0)}%"></div></div>
+      <span class="ppct">${t.progress.toFixed(0)}%</span>
+    </div>
+  `).join('');
+}
+
+// ============================================================
+// ANTIVIRUS ENGINE
+// ============================================================
+function scheduleAVScan() {
+  if (G.avTimer) clearTimeout(G.avTimer);
+  G.avTimer = setTimeout(runAVScan, G.avInterval);
+}
+
+function runAVScan() {
+  if (!G.running) return;
+  if (G.hiding) {
+    log('AV scan initiated — HIDDEN, reduced detection', 'warn');
+    G.detection = Math.max(0, G.detection - 5);
+    scheduleAVScan();
+    return;
+  }
+
+  const avAlert = document.getElementById('av-alert');
+  avAlert.classList.add('show');
+  log('⚠ ANTIVIRUS SCAN IN PROGRESS', 'danger');
+
+  let elapsed = 0;
+  const scanTime = 8000;
+  const scanTick = setInterval(() => {
+    elapsed += 500;
+    if (elapsed >= scanTime) {
+      clearInterval(scanTick);
+      avAlert.classList.remove('show');
+      const detIncrease = 10 + G.infectedFiles.size * 2 + G.tasks.length * 3;
+      G.detection = Math.min(100, G.detection + detIncrease);
+      log(`AV scan complete — detection ▲${detIncrease}%`, 'danger');
+      updateStats();
+      scheduleAVScan();
+    }
+  }, 500);
+}
+
+// ============================================================
+// WIN / LOSE
+// ============================================================
+function triggerWin(method) {
+  if (G.phase === 'win' || G.phase === 'game_over') return;
+  G.phase = 'win';
+  G.running = false;
+  const es = document.getElementById('endscreen');
+  es.className = 'show win';
+  document.getElementById('end-title').textContent = 'OBJECTIVE COMPLETE';
+  document.getElementById('end-sub').textContent = method + ' — SYSTEM COMPROMISED';
+  log('MISSION ACCOMPLISHED: ' + method, 'success');
+}
+
+function triggerLose(reason) {
+  if (G.phase === 'win' || G.phase === 'game_over') return;
+  G.phase = 'game_over';
+  G.running = false;
+  const es = document.getElementById('endscreen');
+  es.className = 'show lose';
+  document.getElementById('end-title').textContent = 'PAYLOAD TERMINATED';
+  document.getElementById('end-sub').textContent = reason;
+  log('GAME OVER: ' + reason, 'danger');
+}
+
+// ============================================================
+// MAIN GAME TICK
+// ============================================================
+let lastTick = 0;
+function gameTick(timestamp) {
+  if (!G.running) return;
+  const dt = (timestamp - lastTick) / 1000;
+  lastTick = timestamp;
+
+  if (dt > 0 && dt < 5) {
+    // CPU naturally decreases
+    G.cpu = Math.max(5, G.cpu - dt * 0.5);
+    // Detection slowly decreases if hiding
+    if (G.hiding) G.detection = Math.max(0, G.detection - dt * 2);
+    // Gain proc slowly
+    G.proc += dt * 0.1;
+
+    tickTasks(dt);
+    updateStats();
+  }
+
+  requestAnimationFrame(gameTick);
+}
+
+// ============================================================
+// DORMANT PHASE
+// ============================================================
+function startDormantPhase() {
+  document.getElementById('waiting-screen').classList.add('show');
+  document.getElementById('file-view').style.display = 'none';
+  document.getElementById('waiting-desc').innerHTML = `You are dormant inside <strong>Downloads/setup_crack.exe</strong>.<br>User is browsing. Wait for interaction or take action.`;
+
+  const choices = document.getElementById('waiting-choices');
+  choices.innerHTML = '';
+
+  const makeBtn = (label, cls, action) => {
+    const b = document.createElement('button');
+    b.className = 'choice-btn ' + cls;
+    b.textContent = label;
+    b.onclick = action;
+    choices.appendChild(b);
+  };
+
+  makeBtn('WAIT FOR USER (Safe)', '', () => {
+    const waitTime = 15000 + Math.random() * 20000;
+    document.getElementById('waiting-desc').innerHTML = `Waiting for user to open file...<br><span class="blink">...</span>`;
+    choices.innerHTML = '';
+    log('Dormant — waiting for user to open file', 'info');
+    setTimeout(() => activatePayload(false), waitTime);
+  });
+
+  makeBtn('WAIT TO BE MOVED (Moderate risk)', '', () => {
+    const waitTime = 8000 + Math.random() * 10000;
+    document.getElementById('waiting-desc').innerHTML = `Waiting to be moved to new directory...<br><span class="blink">...</span>`;
+    choices.innerHTML = '';
+    log('Monitoring for file move operation', 'info');
+    setTimeout(() => {
+      if (Math.random() < 0.7) {
+        activatePayload(false);
+        log('File moved by user — now active!', 'success');
+      } else {
+        log('Move operation failed — still waiting', 'warn');
+        startDormantPhase();
+      }
+    }, waitTime);
+  });
+
+  makeBtn('SELF-EXECUTE (Extremely Risky!)', 'risk', () => {
+    log('Attempting self-execution...', 'danger');
+    G.detection += 35;
+    choices.innerHTML = '';
+    document.getElementById('waiting-desc').innerHTML = `Self-executing... high detection risk!<br><span class="blink" style="color:var(--red)">DANGER</span>`;
+    setTimeout(() => {
+      if (G.detection >= 100) {
+        triggerLose('DETECTED DURING SELF-EXECUTION');
+      } else {
+        activatePayload(true);
+      }
+    }, 2000);
+  });
+}
+
+function activatePayload(selfExec) {
+  G.phase = 'active';
+  document.getElementById('waiting-screen').classList.remove('show');
+  document.getElementById('file-view').style.display = '';
+
+  const downloadsNode = nodeMap['downloads'];
+  G.infectedFiles.add('you');
+  G.infectedFiles.add('downloads');
+
+  // Count total user files for encrypt goal
+  countUserFiles(fs);
+
+  navigateTo(downloadsNode);
+  log(selfExec ? 'Payload self-executed — now a live process' : 'User opened file — payload activated!', 'success');
+  log('You are now running as a live process. Explore the filesystem.', 'sys');
+
+  scheduleAVScan();
+  renderFSTree();
+}
+
+function countUserFiles(node) {
+  if (!node) return;
+  if (node.type !== 'dir' && node.type !== 'exe') G.totalUserFiles++;
+  if (node.children) node.children.forEach(countUserFiles);
+}
+
+// ============================================================
+// INTRO / START
+// ============================================================
+document.querySelectorAll('.goal-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.goal-card').forEach(c => c.classList.remove('sel'));
+    card.classList.add('sel');
+    G.goal = card.dataset.goal;
+    document.getElementById('start-btn').disabled = false;
+  });
+});
+
+document.getElementById('start-btn').addEventListener('click', () => {
+  if (!G.goal) return;
+
+  document.getElementById('intro').style.display = 'none';
+  G.running = true;
+  G.phase = 'dormant';
+
+  fs = makeFS();
+  buildNodeMap(fs);
+
+  G.startTime = Date.now();
+  lastTick = performance.now();
+  requestAnimationFrame(gameTick);
+
+  renderFSTree();
+  startDormantPhase();
+
+  log('Payload initialized. Objective: ' + G.goal.toUpperCase(), 'system');
+  log('System: Windows 10 Pro 22H2. User: david_chen', 'sys');
+  log('AV: Windows Defender active', 'warn');
+});
+
+// Stats only — fs not yet initialized
+updateStats();
+</script>
+</body>
+</html>
